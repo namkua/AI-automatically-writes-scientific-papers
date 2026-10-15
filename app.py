@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from html import escape
 from typing import Any
 
@@ -21,6 +22,26 @@ st.markdown("""
 :root{--ink:#e8eefc;--muted:#93a2bf;--panel:rgba(17,27,48,.8);--line:rgba(135,160,202,.24);--cyan:#50d9e9}
 [data-testid="stAppViewContainer"],[data-testid="stHeader"]{background:radial-gradient(circle at 82% 0%,#173b60 0,#0b1220 43%,#070b14 100%)}
 [data-testid="stAppViewContainer"] *,[data-testid="stSidebar"] *{color:var(--ink)}
+[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,[data-testid="stSelectbox"] [data-baseweb="select"]>div,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border:1px solid var(--line)!important;box-shadow:none!important}
+[data-testid="stSidebar"] div[data-baseweb="select"],[data-testid="stSidebar"] div[data-baseweb="select"]>div{background-color:#101a2d!important;color:#e8eefc!important;border-color:var(--line)!important}
+[data-testid="stSidebar"] div[data-baseweb="select"] span,[data-testid="stSidebar"] div[data-baseweb="select"] input{color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important}
+[data-testid="stSidebar"] div[data-baseweb="select"] svg{fill:#e8eefc!important;color:#e8eefc!important}
+[data-testid="stSidebar"] [role="option"]{background-color:#101a2d!important;color:#e8eefc!important}
+[data-testid="stSidebar"] input:not([type="checkbox"]),[data-testid="stSidebar"] textarea{background-color:rgba(15,23,42,.92)!important;color:#ffffff!important;-webkit-text-fill-color:#ffffff!important;border-color:var(--line)!important}
+[data-testid="stSidebar"] input:not([type="checkbox"])::placeholder,[data-testid="stSidebar"] textarea::placeholder{color:#93a2bf!important;-webkit-text-fill-color:#93a2bf!important}
+[data-testid="stSidebar"] .stTextInput label,[data-testid="stSidebar"] .stTextArea label,[data-testid="stSidebar"] .stSelectbox label{color:#f8fafc!important;font-weight:500!important}
+[data-testid="stSidebar"] .stTextInput div:has(> input),[data-testid="stSidebar"] .stTextArea div:has(> textarea){background-color:rgba(15,23,42,.92)!important}
+[data-testid="stSidebar"] .stSelectbox div:has(> input[role="combobox"]){background-color:#101a2d!important}
+.stSelectbox .react-aria-ComboBox>div,.stSelectbox div:has(> input[role="combobox"]){background-color:#101a2d!important;color:#e8eefc!important;border:1px solid var(--line)!important;border-radius:10px!important}
+.stSelectbox input[role="combobox"]{background-color:transparent!important;color:#ffffff!important;-webkit-text-fill-color:#ffffff!important}
+.stSelectbox [role="option"]{background-color:#101a2d!important;color:#e8eefc!important}
+div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBlock pre,.stCodeBlock code{background:#101a2d!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important}
+.stTabs [role="tablist"]{background:#0a111f!important;overflow-x:auto!important;scrollbar-color:#50d9e9 #101a2d;white-space:nowrap}
+.stTabs [role="tab"]{background:#101a2d!important;color:#cbd5e1!important;white-space:nowrap!important}
+.stTabs [role="tab"][aria-selected="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid var(--cyan)!important}
+.stSelectbox label,.stTextInput label,.stTextArea label{color:var(--ink)!important}
+.stDownloadButton>button,.stButton>button{background:#101a2d!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:10px;font-weight:700;white-space:normal;line-height:1.2;min-height:3rem}
+.stDownloadButton>button:hover,.stButton>button:hover{background:#17304d!important;border-color:var(--cyan)!important;color:#f8fbff!important}
 [data-testid="stSidebar"]{background:rgba(7,13,25,.96);border-right:1px solid var(--line)}
 .block-container{max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:2rem 2.3rem;margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .35rem;font-size:2.35rem}.hero p{color:#b9c8e2!important;margin:0}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
 </style>""", unsafe_allow_html=True)
@@ -59,9 +80,75 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
 
 def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     table = pd.DataFrame(research.get("benchmark_table", [])).to_markdown(index=False) if research.get("benchmark_table") else "No benchmark rows available."
+    models = pd.DataFrame(research.get("models_compared", []))[['name', 'role', 'backbone', 'params_m', 'latency_ms']].to_markdown(index=False) if research.get("models_compared") else "No model catalog available."
+    datasets = pd.DataFrame(research.get("datasets_used", []))[['name', 'modality', 'sample_size', 'primary_metric']].to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
     sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"])]
     refs = "\n".join(f"{i}. {item}" for i, item in enumerate(paper["references"], 1))
-    return "# " + paper["title"] + "\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n{table}\n\n## References\n{refs}\n"
+    return "# " + paper["title"] + "\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Benchmark Matrix\n{table}\n\n## References\n{refs}\n"
+
+
+def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
+    sections = [
+        ("Abstract", paper["abstract"]),
+        ("1. Introduction", paper["introduction"]),
+        ("2. Related Work", paper["related_work"]),
+        ("3. Proposed Methodology", paper["methodology"]),
+        ("4. Experimental Setup & Results", paper["experimental_results"]),
+        ("5. Discussion", paper["discussion"]),
+        ("6. Conclusion", paper["conclusion"]),
+    ]
+    body = "".join(f"<section><h2>{escape(title)}</h2><p>{escape(text).replace(chr(10), '<br>')}</p></section>" for title, text in sections)
+    formulas = "".join(f"<div class='formula'>{escape(formula)}</div>" for formula in paper["mathematical_formulas"])
+    references = "".join(f"<li>{escape(reference)}</li>" for reference in paper["references"])
+    models = pd.DataFrame(research.get("models_compared", [])).to_html(index=False, border=0, classes="results-table", columns=["name", "role", "backbone", "params_m", "latency_ms"])
+    datasets = pd.DataFrame(research.get("datasets_used", [])).to_html(index=False, border=0, classes="results-table", columns=["name", "modality", "sample_size", "primary_metric"])
+    table = pd.DataFrame(research.get("benchmark_table", [])).to_html(index=False, border=0, classes="results-table")
+    return f"""<!doctype html>
+<html lang='en'><head><meta charset='utf-8'><title>{escape(paper['title'])}</title>
+<style>
+@page {{ size: A4; margin: 15mm; }}
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; color: #172033; background: #edf1f7; font-family: Georgia, 'Times New Roman', serif; line-height: 1.48; }}
+.paper {{ max-width: 1120px; margin: 24px auto; padding: 34px 42px; background: #fff; box-shadow: 0 10px 30px #17203322; }}
+header {{ text-align: center; border-bottom: 1px solid #aeb8c7; padding-bottom: 18px; margin-bottom: 20px; }}
+h1 {{ font-size: 25px; line-height: 1.16; margin: 0 auto 10px; max-width: 900px; }}
+.meta {{ color: #536176; font: 12px Arial, sans-serif; }}
+.columns {{ column-count: 2; column-gap: 30px; column-rule: 1px solid #d8dee8; }}
+section, .formula, .table-wrap, .references {{ break-inside: avoid; }}
+h2 {{ font-size: 15px; color: #183b63; margin: 0 0 7px; }}
+p {{ font-size: 11px; text-align: justify; margin: 0 0 15px; }}
+.formula {{ font-family: 'Times New Roman', serif; font-size: 12px; text-align: center; padding: 9px; margin: 8px 0; background: #f3f6fa; border-left: 3px solid #278ea5; }}
+.table-wrap {{ column-span: all; margin-top: 18px; }}
+.results-table {{ width: 100%; border-collapse: collapse; font: 10px Arial, sans-serif; }}
+.results-table th {{ background: #183b63; color: white; text-align: left; }}
+.results-table th, .results-table td {{ padding: 5px 6px; border: 1px solid #d8dee8; }}
+.references {{ column-span: all; margin-top: 18px; font-size: 10px; }}
+.references li {{ margin-bottom: 5px; }}
+footer {{ margin-top: 24px; padding-top: 10px; border-top: 1px solid #aeb8c7; color: #68758a; font: 10px Arial, sans-serif; text-align: center; }}
+@media print {{ body {{ background: white; }} .paper {{ margin: 0; padding: 0; box-shadow: none; }} }}
+</style></head><body><main class='paper'>
+<header><h1>{escape(paper['title'])}</h1><div class='meta'>Enterprise Academic Research Suite · IEEE-style generated manuscript</div></header>
+<div class='columns'>{body}<section><h2>Mathematical Formulation</h2>{formulas}</section></div>
+<div class='table-wrap'><h2>Models Used</h2>{models}<h2>Datasets Used</h2>{datasets}<h2>Benchmark Matrix</h2>{table}</div>
+<div class='references'><h2>References</h2><ol>{references}</ol></div>
+<footer>Generated research artifact. Simulated metrics should be validated with instrumented experiments before publication.</footer>
+</main></body></html>"""
+
+
+def answer_paper_question(question: str, paper: dict[str, Any], research: dict[str, Any]) -> str:
+    payload = {"question": question, "paper": paper, "research": research}
+    try:
+        response = requests.post("http://localhost:8000/api/paper/ask", json=payload, timeout=15)
+        if response.ok:
+            return response.json().get("answer", "No answer available.")
+    except requests.RequestException:
+        pass
+    try:
+        from backend.main import _answer_paper_question
+        from backend.schemas import ResearcherOutput, WriterOutput
+        return _answer_paper_question(question, WriterOutput.model_validate(paper), ResearcherOutput.model_validate(research))
+    except Exception:
+        return "I could not analyze that question from the generated manuscript. Try asking about the method, baselines, datasets, results, or limitations."
 
 
 def render_header(result: dict[str, Any]) -> None:
@@ -134,6 +221,7 @@ def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
 
 def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     markdown = paper_markdown(paper, research)
+    ieee_html = ieee_html_report(paper, research)
     st.title(paper["title"])
     st.caption("Full Academic Manuscript · IEEE/NeurIPS-inspired structure")
     sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"])]
@@ -143,11 +231,27 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     st.subheader("References")
     for index, reference in enumerate(paper["references"], 1):
         st.markdown(f"{index}. {reference}")
-    html = "<html><body style='font-family:Georgia;max-width:900px;margin:40px auto;line-height:1.65'><h1>" + escape(paper["title"]) + "</h1>" + "".join(f"<h2>{escape(title)}</h2><p>{escape(body)}</p>" for title, body in sections) + "</body></html>"
-    downloads = st.columns(3)
+    st.subheader("🔬 Reproducibility: Models & Datasets Used")
+    st.caption("Các thành phần dưới đây là catalog được dùng để tạo benchmark và nội dung bài báo cho topic hiện tại.")
+    model_column, dataset_column = st.columns(2)
+    with model_column:
+        st.markdown("**Models / Architectures**")
+        st.dataframe(pd.DataFrame(research["models_compared"])[["name", "role", "backbone", "params_m", "latency_ms"]], use_container_width=True, hide_index=True)
+    with dataset_column:
+        st.markdown("**Datasets / Evaluation Splits**")
+        st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric"]], use_container_width=True, hide_index=True)
+    downloads = st.columns(4)
     downloads[0].download_button("📥 Download Paper (.MD)", markdown, "research_paper.md", "text/markdown", use_container_width=True)
     downloads[1].download_button("📥 Download Structured Data (.JSON)", json.dumps({"paper":paper,"research":research}, indent=2), "research_result.json", "application/json", use_container_width=True)
-    downloads[2].download_button("🖨️ Download Printable Report (.HTML)", html, "research_report.html", "text/html", use_container_width=True)
+    downloads[2].download_button("🖨️ Download Printable Report (.HTML)", ieee_html, "research_report.html", "text/html", use_container_width=True)
+    downloads[3].download_button("🖨️ Generate & Download IEEE-Style HTML Report", ieee_html, "ieee_style_research_report.html", "text/html", use_container_width=True)
+    st.divider()
+    st.subheader("💬 Ask This Research Paper")
+    question = st.text_input("Ask questions about this generated paper", placeholder="e.g., What are the baseline comparisons? What is the core limitation?", key="paper_question")
+    if question.strip():
+        with st.spinner("Analyzing the manuscript..."):
+            answer = answer_paper_question(question, paper, research)
+        st.markdown(f"<div class='callout'><strong>Research Assistant</strong><br>{escape(answer)}</div>", unsafe_allow_html=True)
 
 
 def render_review(review: dict[str, Any]) -> None:
@@ -176,9 +280,16 @@ def main() -> None:
         st.text_area("Constraints", key="constraints", height=75)
         run_clicked = st.button("🚀 Run Autonomous Research Pipeline", type="primary", use_container_width=True)
     if run_clicked or "full_pipeline_result" not in st.session_state:
-        with st.status("🤖 Orchestrating Multi-Agent Research Pipeline...", expanded=True) as status:
-            for agent in ("Planner", "Researcher", "Writer", "Reviewer"):
-                st.write(f"{agent} Agent · processing structured research state")
+        with st.status("🤖 Orchestrating Enterprise Multi-Agent Research Lab...", expanded=True) as status:
+            execution_log = [
+                ("🟢 [Planner Agent]", "Phân tích đề tài, trích xuất từ khóa miền, thiết lập giả thuyết nghiên cứu và xây dựng sơ đồ phân rã nhiệm vụ...", 0.45),
+                ("🟢 [Researcher Agent]", "Khởi tạo mô hình giả lập, sinh dữ liệu NumPy qua 15 epochs, tính toán loss/accuracy hội tụ và trích xuất ma trận benchmark...", 0.65),
+                ("🟢 [Writer Agent]", "Biên soạn bài báo khoa học chuẩn IEEE, tích hợp công thức LaTeX và tài liệu tham khảo...", 0.55),
+                ("🟢 [Reviewer Agent]", "Đánh giá tự động theo rubric học thuật, chấm điểm Novelty, Rigor, Clarity và đưa ra nhận xét chi tiết...", 0.5),
+            ]
+            for agent, message, duration in execution_log:
+                st.write(f"{agent} {message}")
+                time.sleep(duration)
             result = run_pipeline(st.session_state.topic, st.session_state.domain, st.session_state.objective, st.session_state.constraints)
             if not result:
                 status.update(label="Pipeline unavailable", state="error")
