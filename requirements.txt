@@ -3,7 +3,7 @@ anthropic
 aider-chat
 backoff
 openai
-google-generativeai
+google-genai
 pydantic>=2.0
 fastapi>=0.110
 uvicorn[standard]>=0.30
@@ -25,3 +25,14 @@ datasets
 tiktoken
 wandb
 tqdm
+
+# Optional evidence and domain integrations used by Smart Research Lab
+google-generativeai
+pyalex
+peft
+accelerate
+timm
+gymnasium
+stable-baselines3
+librosa
+speechbrain

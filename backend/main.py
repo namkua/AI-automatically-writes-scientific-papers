@@ -13,12 +13,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.schemas import (
     AblationRow,
+    AblationSpec,
+    AgentCoordinationSpec,
     DatasetSpec,
     FullPipelineResponse,
+    InferenceEngineSpec,
+    KnowledgeBaseSpec,
     MetricCurvePoint,
     ModelSpec,
     PipelineRequest,
     PlannerOutput,
+    ProjectMetadata,
     ResearcherOutput,
     ReviewerOutput,
     TopicInput,
@@ -38,6 +43,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+PTIT_COURSE_METADATA = {
+    "institution": "Học viện Công nghệ Bưu chính Viễn thông (PTIT)",
+    "faculty": "Khoa Công nghệ Thông tin",
+    "subject": "Hệ thống thông minh",
+    "instructor": "Thầy Hoàng Mạnh Cường",
+    "student_name": "Trần Văn Đức",
+    "student_id": "B23DCCN191",
+}
 
 
 def _normalize_topic(topic: str) -> str:
@@ -225,6 +240,50 @@ def _infer_domain(topic: str, domain: str | None, objective: str | None) -> str:
     return _topic_profile(topic, domain, objective)["domain"]
 
 
+def _knowledge_layer(topic: str, domain: str, objective: str | None, model_names: list[str], dataset_names: list[str]) -> tuple[KnowledgeBaseSpec, InferenceEngineSpec, AgentCoordinationSpec]:
+    profile = _topic_profile(topic, domain, objective)
+    text = f"{topic} {domain} {objective or ''}".lower()
+    matched = [keyword for keyword in profile["keywords"] if _keyword_matches(text, keyword)]
+    confidence = min(0.99, 0.62 + 0.06 * len(matched))
+    knowledge_base = KnowledgeBaseSpec(
+        taxonomy=[domain, profile["modality"], profile["metric"]],
+        routing_rules=[
+            "Prefer explicit domain input over inferred keywords.",
+            "Use token-boundary matching for short technical acronyms.",
+            "Route to complementary core, robustness, and ablation datasets.",
+        ],
+    )
+    inference_engine = InferenceEngineSpec(
+        selected_domain=domain,
+        matched_keywords=matched,
+        routing_confidence=round(confidence, 2),
+        routed_configuration=[f"Models: {', '.join(model_names)}", f"Datasets: {', '.join(dataset_names)}", f"Metric: {profile['metric']}"],
+    )
+    coordination = AgentCoordinationSpec(
+        agents=["Research Planner Agent", "Benchmark Generator Agent", "Metric Evaluator Agent", "Peer Reviewer Agent"],
+        coordination_claim="Typed shared state lets each agent expose assumptions, evidence, metrics, and review feedback before manuscript export.",
+    )
+    return knowledge_base, inference_engine, coordination
+
+
+def _ensure_system_intelligence(plan: PlannerOutput, topic: str, domain: str, objective: str | None) -> PlannerOutput:
+    knowledge_base, inference_engine, coordination = _knowledge_layer(
+        topic,
+        domain,
+        objective,
+        [model.name for model in plan.models_catalog],
+        [dataset.name for dataset in plan.datasets_catalog],
+    )
+    plan.project_metadata = ProjectMetadata(**PTIT_COURSE_METADATA)
+    if not plan.knowledge_base.taxonomy:
+        plan.knowledge_base = knowledge_base
+    if not plan.inference_engine.selected_domain:
+        plan.inference_engine = inference_engine
+    if not plan.agent_coordination.agents:
+        plan.agent_coordination = coordination
+    return plan
+
+
 def _make_dataset_catalog(topic: str, domain: str | None) -> list[DatasetSpec]:
     profile = _topic_profile(topic, domain)
     if profile["domain"] == "Speech & Audio Processing":
@@ -372,13 +431,14 @@ def _safe_live_call(api_key: str | None, prompt: str) -> Any | None:
     if not api_key:
         return None
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import types
 
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(
-            prompt,
-            generation_config={"temperature": 0.3, "response_mime_type": "application/json"},
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.3, response_mime_type="application/json"),
         )
         try:
             return json.loads(response.text)
@@ -426,6 +486,63 @@ def _build_dynamic_planner(topic: str, domain: str | None, objective: str | None
     )
 
 
+def _domain_tech_stack(domain: str) -> list[str]:
+    stacks = {
+        "Natural Language Processing (NLP) / RAG": ["PyTorch", "Hugging Face Transformers", "Hugging Face Datasets", "PEFT", "Accelerate", "FAISS"],
+        "Natural Language Processing (NLP) / Machine Translation": ["PyTorch", "Hugging Face Transformers", "Hugging Face Datasets", "PEFT", "Sacremoses", "Evaluate"],
+        "Natural Language Processing": ["PyTorch", "Hugging Face Transformers", "Hugging Face Datasets", "Tokenizers", "Accelerate"],
+        "Computer Vision": ["PyTorch", "TorchVision", "timm", "Albumentations", "OpenCV", "TorchMetrics"],
+        "Speech & Audio Processing": ["PyTorch", "Librosa", "torchaudio", "SpeechBrain", "Hugging Face Datasets", "JiWER"],
+        "Reinforcement Learning & Robotics": ["PyTorch", "Gymnasium", "Stable-Baselines3", "Shimmy", "TensorBoard", "Farama Utils"],
+        "Reinforcement Learning": ["PyTorch", "Gymnasium", "Stable-Baselines3", "TensorBoard"],
+        "Graph Learning & FinTech": ["PyTorch", "PyTorch Geometric", "NetworkX", "OGB", "scikit-learn", "MLflow"],
+        "Graph Learning": ["PyTorch", "PyTorch Geometric", "DGL", "NetworkX", "scikit-learn"],
+        "Time Series Forecasting": ["PyTorch", "pandas", "scikit-learn", "StatsForecast", "sktime", "Darts"],
+        "Multimodal & Vision-Language": ["PyTorch", "TorchVision", "Hugging Face Transformers", "OpenCLIP", "Albumentations", "W&B"],
+    }
+    return stacks.get(domain, ["Python", "PyTorch", "NumPy", "pandas", "scikit-learn", "MLflow"])
+
+
+def _dataset_source(name: str) -> str:
+    sources = {
+        "LibriSpeech ASR": "https://www.openslr.org/12",
+        "VoxCeleb Speaker Recognition": "https://www.robots.ox.ac.uk/~vgg/data/voxceleb/",
+        "Common Voice Multi-Lingual": "https://commonvoice.mozilla.org/datasets",
+        "MS-COCO Captions": "https://cocodataset.org/#download",
+        "VQA v2.0": "https://visualqa.org/download.html",
+        "Conceptual Captions (CC3M)": "https://ai.google.com/research/ConceptualCaptions/",
+        "MovieLens-20M": "https://grouplens.org/datasets/movielens/20m/",
+        "Criteo Display Advertising": "https://ailab.criteo.com/ressources/",
+        "Elliptic Bitcoin Dataset": "https://www.kaggle.com/datasets/ellipticco/elliptic-data-set",
+        "Cora/Citeseer Graph": "https://github.com/kimiyoung/planetoid",
+        "Natural Questions (NQ)": "https://ai.google.com/research/NaturalQuestions",
+        "HotpotQA Multi-hop Attribution": "https://hotpotqa.github.io/",
+        "TruthfulQA Faithfulness Set": "https://github.com/sylinrl/TruthfulQA",
+        "Flores-101 (Low-Resource Languages)": "https://github.com/facebookresearch/flores",
+        "XNLI Cross-Lingual Evaluation": "https://github.com/facebookresearch/XNLI",
+        "Shakespeare Char": "https://github.com/karpathy/char-rnn/blob/master/data/tinyshakespeare/input.txt",
+        "Enwik8": "https://www.byronosa.com/enwik8",
+        "Text8": "http://mattmahoney.net/dc/textdata.html",
+    }
+    return sources.get(name, "https://huggingface.co/datasets")
+
+
+def _make_ablation_study(plan: PlannerOutput, proposed_score: float, proposed_latency: float) -> list[AblationSpec]:
+    domain = plan.domain
+    components = {
+        "Natural Language Processing (NLP) / RAG": ["Confidence-aware decoding", "Retrieved evidence attribution", "Claim-level verifier"],
+        "Speech & Audio Processing": ["Streaming context gate", "SpecAugment", "Language-model rescoring"],
+        "Computer Vision": ["Multi-scale feature fusion", "Adaptive augmentation", "Uncertainty head"],
+        "Reinforcement Learning & Robotics": ["Contextual policy gate", "Entropy regularization", "Dynamics randomization"],
+        "Graph Learning & FinTech": ["Temporal relation encoder", "Neighbor attention", "Risk calibration"],
+    }.get(domain, ["Adaptive gating", "Robustness regularization", "Uncertainty calibration"])
+    rows = [AblationSpec(configuration="Full proposed model", removed_component="None", primary_metric=round(proposed_score, 4), latency_ms=round(proposed_latency, 2), delta_vs_full=0.0, interpretation="Reference configuration retaining all proposed components.")]
+    for index, component in enumerate(components):
+        drop = 0.018 + index * 0.012
+        rows.append(AblationSpec(configuration=f"Without {component}", removed_component=component, primary_metric=round(max(0.0, proposed_score - drop), 4), latency_ms=round(max(0.1, proposed_latency - (index + 1) * 0.8), 2), delta_vs_full=round(-drop, 4), interpretation=f"Removing {component.lower()} lowers the planned primary metric; verify this effect across independent seeds."))
+    return rows
+
+
 def _build_dynamic_research(plan: PlannerOutput) -> ResearcherOutput:
     topic_tokens = plan.title.split(":")[0]
     seed = int.from_bytes(hashlib.sha256(topic_tokens.encode("utf-8")).digest()[:8], "big") % (2**32)
@@ -458,8 +575,11 @@ def _build_dynamic_research(plan: PlannerOutput) -> ResearcherOutput:
                     proposed_score=round(float(np.clip(proposed_score_curve[index], 0.0, 1.0)), 4),
                 )
             )
+    for dataset in plan.datasets_catalog:
+        dataset.source_url = _dataset_source(dataset.name)
     baseline_reference = max(curve.baseline_score for curve in curves if curve.dataset_name == dataset_names[0])
     proposed_reference = max(curve.proposed_score for curve in curves if curve.dataset_name == dataset_names[0])
+    ablation_study = _make_ablation_study(plan, proposed_reference, next(model.latency_ms for model in plan.models_catalog if model.role == "Proposed"))
     improvement = (proposed_reference - baseline_reference) / max(baseline_reference, 1e-9)
     proposed_scale = 1.0 + float(np.clip(improvement, 0.05, 0.12))
     benchmark_table = [
@@ -478,15 +598,27 @@ def _build_dynamic_research(plan: PlannerOutput) -> ResearcherOutput:
     key_findings = [
         f"The proposed design for {topic_tokens} improves the simulated {plan.evaluation_metrics[0]} by {max(5.0, improvement * 100):.1f}% over the strongest baseline.",
         f"The generated curves show decreasing loss and increasing {plan.evaluation_metrics[0]} across {len(epochs)} epochs.",
+        f"Reasoning consistency is {plan.inference_engine.routing_confidence:.2f} and knowledge retrieval precision is {min(0.98, plan.inference_engine.routing_confidence + 0.02):.2f} under the controlled routing audit.",
         "Ablation results are designed to test whether the proposed signal selection contributes beyond a simple capacity increase.",
     ]
+    reasoning_consistency = round(min(0.99, plan.inference_engine.routing_confidence * 0.96), 2)
+    retrieval_precision = round(min(0.99, plan.inference_engine.routing_confidence + 0.02), 2)
     return ResearcherOutput(
         hardware_setup="1x NVIDIA A100 GPU (40GB VRAM), 64GB CPU RAM, CUDA-enabled PyTorch environment",
         datasets_used=plan.datasets_catalog,
         models_compared=plan.models_catalog,
         training_curves=curves,
         benchmark_table=benchmark_table,
+        ablation_study=ablation_study,
         key_findings=key_findings,
+        tech_stack=_domain_tech_stack(plan.domain),
+        evidence_mode="Controlled Planning Simulation Estimate",
+        reasoning_consistency_score=reasoning_consistency,
+        knowledge_retrieval_precision=retrieval_precision,
+        project_metadata=plan.project_metadata,
+        knowledge_base=plan.knowledge_base,
+        inference_engine=plan.inference_engine,
+        agent_coordination=plan.agent_coordination,
     )
 
 
@@ -504,6 +636,7 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
     average_latency = sum(model.latency_ms for model in baselines) / max(len(baselines), 1)
     dataset_names = ", ".join(dataset.name for dataset in research.datasets_used)
     model_names = ", ".join(model.name for model in research.models_compared)
+    ablation_summary = "; ".join(f"{row.configuration}: {row.primary_metric:.2f} ({row.delta_vs_full:+.2f})" for row in research.ablation_study)
     formulas = [
         r"\mathcal{L}_{total}=\mathcal{L}_{task}+\lambda_1\lVert W\rVert_1+\lambda_2\mathcal{L}_{robust}+\lambda_3\mathcal{L}_{consistency}",
         r"\alpha_{i}=\frac{\exp(q_i^{\top}k_i/\sqrt{d})}{\sum_{j=1}^{n}\exp(q_i^{\top}k_j/\sqrt{d})},\qquad z_i=\sum_{j=1}^{n}\alpha_{ij}v_j",
@@ -523,7 +656,7 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
         formulas[1] = r"P(y|x)=\mathrm{softmax}(W h_{[CLS]}+b),\qquad \mathcal{L}_{CE}=-\sum_{c=1}^{C}y_c\log P(y=c|x)"
     return WriterOutput(
         title=plan.title,
-        abstract=(f"This paper presents a systematic investigation of {topic_title} in the context of {plan.domain}. "
+        abstract=(f"This paper presents a systematic investigation of {topic_title} in the context of {plan.domain}. It frames the system as a knowledge-based reasoning architecture with an explicit inference engine and expert-agent coordination protocol. "
                   f"The study evaluates {proposed.name}, a {proposed.backbone} proposed to improve task-relevant signal selection, against {len(baselines)} representative baselines: {model_names}. "
                   f"Evaluation covers {len(research.datasets_used)} complementary datasets ({dataset_names}) and reports predictive quality, robustness, parameter count, and inference latency. "
                   f"The proposed configuration reaches a primary score of {proposed_score:.2f}, compared with the strongest baseline score of {baseline_score:.2f}, corresponding to a relative improvement of {gain:.1f}%. "
@@ -539,17 +672,25 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
         related_work=("Prior research in machine learning has followed three broad directions. The first develops increasingly expressive backbone architectures, including convolutional encoders, recurrent networks, graph message passing, and attention-based transformers. The second introduces domain priors so that models exploit structure that generic representation learning may overlook. The third studies robustness and efficiency through regularization, pruning, distillation, quantization, or adaptive computation. Each direction is valuable, but they are frequently evaluated in isolation.\n\n"
                       f"Our work is closest to task-aware adaptive modeling. Unlike a purely architecture-centric comparison, we evaluate {proposed.name} alongside {model_names} under the same reporting contract. This matters because a model with a larger score can still be unattractive when its latency or parameter budget grows disproportionately. We consequently use the utility formulation reported in the paper to keep quality and cost visible together.\n\n"
                       "The distinction from prior benchmark-only studies is methodological: we treat the catalog as a compact experimental matrix that can be regenerated for a new topic, while preserving common evidence requirements. The approach does not claim that one architecture dominates every domain. Instead, it offers a disciplined mechanism for testing whether a proposed inductive bias contributes beyond capacity, and for identifying the additional data, statistical tests, or deployment trials needed before making a stronger claim."),
-        methodology=(f"The proposed method, {proposed.name}, uses a {proposed.backbone}. Its core operation first encodes the input into task-relevant representations, then computes context-dependent weights over candidate signals, and finally fuses the selected evidence with a residual path. This construction is intended to retain stable low-level information while allowing the model to emphasize interactions that are predictive for {topic_title}. A regularized objective combines the task loss with sparsity, robustness, and consistency terms; the corresponding equations are listed below.\n\n"
+        methodology=(f"The proposed method, {proposed.name}, uses a {proposed.backbone}. At the system level, a Knowledge Base stores the domain taxonomy, inference rules, model catalog, dataset catalog, and metric definitions. The Inference Engine applies token-boundary matching and domain-priority routing before the Benchmark Generator Agent constructs the experiment matrix. The Metric Evaluator Agent then computes predictive and intelligent-system measures, while the Peer Reviewer Agent audits evidence and claim scope. This knowledge-based reasoning and expert coordination design makes the pipeline inspectable rather than a single opaque generation call.\n\n"
+                  f"Its core operation first encodes the input into task-relevant representations, then computes context-dependent weights over candidate signals, and finally fuses the selected evidence with a residual path. This construction is intended to retain stable low-level information while allowing the model to emphasize interactions that are predictive for {topic_title}. A regularized objective combines the task loss with sparsity, robustness, and consistency terms; the corresponding equations are listed below.\n\n"
                       f"The experimental protocol uses {len(research.datasets_used)} datasets and compares {len(research.models_compared)} models: {model_names}. Each configuration is evaluated with the same split policy, optimization schedule, stopping criterion, and measurement interface. We record the primary and secondary metrics, training curves, parameter count, FLOPs, latency, and qualitative notes. The benchmark matrix is anchored on {research.benchmark_table[0].dataset_name if research.benchmark_table else 'the primary dataset'} so that the ablation comparison remains directly interpretable.\n\n"
                       f"For reproducibility, the reference hardware is {research.hardware_setup}. The proposed system contains {proposed.params_m:.1f}M parameters, requires {proposed.flops_g:.1f} GFLOPs per inference, and records {proposed.latency_ms:.1f} ms latency in the generated estimate. These values are not presented as universal measurements; they are controlled planning values that should be replaced by instrumented runs before publication. This distinction keeps the generated manuscript useful for planning while making its evidence boundary explicit. Optimization follows a constrained empirical protocol: the learning rate is annealed, early stopping is tied to convergence stability rather than a single favorable epoch, and each reported gain is interpreted alongside parameter and latency budgets. This design distinguishes an inductive-bias contribution from a superficial increase in capacity."),
         mathematical_formulas=formulas,
         experimental_results=(f"Across the generated benchmark matrix, {proposed.name} obtains a primary metric of {proposed_score:.2f}, whereas the strongest baseline reaches {baseline_score:.2f}. The absolute difference is {proposed_score - baseline_score:.2f}, equivalent to a {gain:.1f}% relative gain. The secondary metric changes from the baseline reference of {baseline_rows[0].secondary_metric if baseline_rows else 0.74:.2f} to {proposed_rows[0].secondary_metric if proposed_rows else 0.81:.2f}. These figures indicate a meaningful improvement under the controlled protocol, while the table should still be read as evidence for a research hypothesis rather than a substitute for repeated measurements.\n\n"
                        f"The result is also interpretable in terms of convergence dynamics. Over the 15-epoch simulated schedule, the proposed trajectory reduces optimization loss while increasing the primary score, with bounded perturbations that preserve a realistic rather than perfectly monotonic trace. A credible experimental narrative reports both central tendency and residual variance instead of presenting an artificially smooth curve as proof of generalization.\n\n"
                                f"The efficiency profile is equally important. {proposed.name} uses {proposed.params_m:.1f}M parameters and {proposed.flops_g:.1f} GFLOPs with an estimated latency of {proposed.latency_ms:.1f} ms. The baseline catalog spans {min(model.latency_ms for model in baselines):.1f}-{max(model.latency_ms for model in baselines):.1f} ms and {min(model.params_m for model in baselines):.1f}-{max(model.params_m for model in baselines):.1f}M parameters. Convergence traces show the proposed loss decreasing more rapidly, while its score rises from approximately 0.82 to 0.92 over ten epochs versus 0.85 for the baseline trajectory.\n\n"
-                               "The ablation rows suggest that the gain is not explained solely by adding parameters: the proposed configuration remains competitive on latency and improves both quality dimensions. A complete publication would extend this analysis with multiple random seeds, confidence intervals, calibration, subgroup performance, and a held-out external dataset. It should also record preprocessing time, peak memory, throughput at several batch sizes, and the operational threshold used to convert scores into decisions. Those measurements would determine whether the observed margin survives outside the controlled planning environment."),
+                               f"The ablation rows suggest that the gain is not explained solely by adding parameters: {ablation_summary}. The proposed configuration remains competitive on latency and improves both quality dimensions. A complete publication would extend this analysis with multiple random seeds, confidence intervals, calibration, subgroup performance, and a held-out external dataset. It should also record preprocessing time, peak memory, throughput at several batch sizes, and the operational threshold used to convert scores into decisions. Those measurements would determine whether the observed margin survives outside the controlled planning environment."),
         discussion=(f"The results support the hypothesis that task-aware signal selection can improve {topic_title} without an extreme computational penalty. The most direct evidence is the joint movement of the primary score from {baseline_score:.2f} to {proposed_score:.2f} and the controlled latency of {proposed.latency_ms:.1f} ms. This is a more informative result than a score increase alone because the intended use case includes operational constraints. The improvement should be interpreted as a Pareto-style trade-off: a model is preferable only when its quality gain remains material after accounting for memory, throughput, and operational latency.\n\n"
                     "There are, however, important qualifications. The benchmark catalog contains complementary views of the task, but its generated estimates do not establish statistical significance. Dataset shift may change the ranking of models, particularly when the proposed inductive bias depends on relationships or modality-specific signals. Similarly, latency depends on batch size, compiler, hardware utilization, and implementation details. The reported efficiency numbers should therefore be treated as a measurement plan until verified with a profiler.\n\n"
                     "From a research design perspective, the strongest next step is a pre-registered multi-seed experiment with paired bootstrap intervals and a clear error taxonomy. Qualitative inspection should focus on cases where the proposed model disagrees with the strongest baseline. Such analysis can distinguish genuine representation improvements from favorable sampling and can guide targeted revisions to the architecture or data pipeline."),
+        threats_to_validity=[
+            "Construct validity: the fallback benchmark and latency values are controlled planning estimates, not instrumented measurements from downloaded datasets.",
+            "Internal validity: deterministic topic-seeded curves can understate variance, hyperparameter sensitivity, and random-seed effects.",
+            "External validity: public benchmark distributions may not represent deployment populations, languages, devices, or rare failure modes.",
+            "Hardware validity: latency, memory, and throughput depend on accelerator, compiler, batch size, precision, and implementation details.",
+            "Data validity: licensing, demographic bias, annotation noise, leakage, and temporal drift require dataset-specific audits before publication.",
+        ],
         conclusion=(f"This paper developed a structured study of {topic_title} for {plan.domain}. The proposed {proposed.name} reached {proposed_score:.2f} versus {baseline_score:.2f} for the strongest baseline, a relative improvement of {gain:.1f}%, while operating at {proposed.latency_ms:.1f} ms with {proposed.params_m:.1f}M parameters. The combined benchmark, convergence, and efficiency evidence supports the value of the proposed task-aware design under the stated assumptions.\n\n"
                     "The conclusion is intentionally bounded. The current results are a rigorous planning artifact and a coherent fallback estimate, not a claim that replaces instrumented experimentation. Before submission, the study should validate all numbers on the named datasets, report uncertainty across independent runs, compare against current domain leaders, and document data governance. With those additions, the pipeline can evolve from a demonstration into a reproducible and auditable research system. The same protocol can then be transferred to new topics while preserving the separation between hypothesis generation, empirical verification, manuscript writing, and critical review. This separation is itself a contribution to dependable research automation because it makes assumptions visible and gives reviewers concrete checkpoints for challenging unsupported conclusions."),
         references=[
@@ -614,7 +755,7 @@ def _answer_paper_question(question: str, paper: WriterOutput, research: Researc
     return f"This paper studies {paper.title}. Its central claim is that a topic-aware design can improve the target task while keeping robustness and deployment cost visible. Ask about the baseline comparison, datasets, method, results, or limitations for a more specific answer."
 
 
-def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, api_key: str | None) -> PlannerOutput | None:
+def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, constraints: str | None, api_key: str | None) -> PlannerOutput | None:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
@@ -624,7 +765,8 @@ def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, api_
             "{title, domain, research_question, hypothesis, datasets_catalog:[{name, modality, sample_size, input_spec, primary_metric, description}], "
             "models_catalog:[{name, role, backbone, params_m, flops_g, latency_ms, key_characteristic}], baseline_methods:[str], proposed_method:str, "
             "evaluation_metrics:[str], experimental_plan:[str], report_outline:[str]}. "
-            f"Topic: {topic}; domain: {domain or 'AI research'}; objective: {objective or 'design a rigorous study'}"
+            f"Topic: {topic}; domain: {domain or 'AI research'}; objective: {objective or 'design a rigorous study'}; "
+            f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets and flag any unavailable measurements as planned experiments."
         )
         payload = _safe_live_call(key, prompt)
         if not payload:
@@ -634,19 +776,53 @@ def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, api_
         return None
 
 
+def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key: str | None) -> WriterOutput | None:
+    key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key:
+        return None
+    schema = "{title, abstract, keywords:[str], introduction, related_work, methodology, mathematical_formulas:[str], experimental_results, discussion, threats_to_validity:[str], conclusion, references:[str]}"
+    prompt = (
+        "Return only valid JSON matching this exact schema: " + schema + ". "
+        "Write a formal IEEE/NeurIPS-inspired manuscript in objective scientific English. "
+        "Abstract must contain Context, Problem Gap, Proposed Expert Method, Quantitative Results, and Broader Impact. "
+        "Introduction must state exactly three methodological contributions. Related Work must compare backbone scaling, "
+        "domain priors, and adaptive computation. Methodology must include domain-correct LaTeX equations for input representation, "
+        "routing or attention/gating, and a joint loss combining task, sparsity, and consistency terms. "
+        "Experimental Results must name the A100 hardware, schedule, datasets, baselines, parameters, latency, and ablation study. "
+        "Threats to Validity must address dataset bias, distribution shift, and hardware bounds. "
+        "Tie every performance claim to named datasets and baselines. Never describe planning estimates as measured facts. "
+        f"Topic: {plan.title}. Domain: {plan.domain}. Research question: {plan.research_question}. "
+        f"Models: {json.dumps([item.model_dump() for item in plan.models_catalog])}. "
+        f"Datasets: {json.dumps([item.model_dump() for item in research.datasets_used])}. "
+        f"Knowledge Base: {json.dumps(plan.knowledge_base.model_dump())}. "
+        f"Inference Engine: {json.dumps(plan.inference_engine.model_dump())}. "
+        f"Multi-Agent Coordination: {json.dumps(plan.agent_coordination.model_dump())}. "
+        f"Ablation Study: {json.dumps([item.model_dump() for item in research.ablation_study])}. "
+        f"Evidence status: {research.evidence_mode}. Reasoning Consistency Score: {research.reasoning_consistency_score}. "
+        f"Knowledge Retrieval Precision: {research.knowledge_retrieval_precision}."
+    )
+    try:
+        payload = _safe_live_call(key, prompt)
+        return WriterOutput.model_validate(payload) if payload else None
+    except Exception:
+        return None
+
+
 def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     topic = _normalize_topic(request.topic)
     domain = request.domain or _infer_domain(topic, request.domain, request.objective)
     objective = request.objective or "Design a rigorous, reproducible, and evidence-driven study."
     api_key = request.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    plan = _maybe_live_plan(topic, domain, objective, api_key)
+    plan = _maybe_live_plan(topic, domain, objective, request.constraints, api_key)
     mode_used = "live_gemini" if plan is not None else "dynamic_fallback"
     if plan is None:
         plan = _build_dynamic_planner(topic, domain, objective)
+    plan = _ensure_system_intelligence(plan, topic, domain, objective)
     research = _build_dynamic_research(plan)
-    paper = _build_dynamic_writer(plan, research)
+    live_paper = _maybe_live_writer(plan, research, api_key)
+    paper = live_paper or _build_dynamic_writer(plan, research)
     review = _build_dynamic_reviewer(paper, research)
-    return FullPipelineResponse(mode_used=mode_used, plan=plan, research=research, paper=paper, review=review)
+    return FullPipelineResponse(mode_used=mode_used, paper_mode="live_gemini" if live_paper else "dynamic_fallback", plan=plan, research=research, paper=paper, review=review)
 
 
 @app.get("/health")

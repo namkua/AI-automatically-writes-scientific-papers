@@ -81,10 +81,19 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
 def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     table = pd.DataFrame(research.get("benchmark_table", [])).to_markdown(index=False) if research.get("benchmark_table") else "No benchmark rows available."
     models = pd.DataFrame(research.get("models_compared", []))[['name', 'role', 'backbone', 'params_m', 'latency_ms']].to_markdown(index=False) if research.get("models_compared") else "No model catalog available."
-    datasets = pd.DataFrame(research.get("datasets_used", []))[['name', 'modality', 'sample_size', 'primary_metric']].to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
-    sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"])]
+    datasets = pd.DataFrame(research.get("datasets_used", []))[['name', 'modality', 'sample_size', 'primary_metric', 'source_url']].to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
+    ablations = pd.DataFrame(research.get("ablation_study", [])).to_markdown(index=False) if research.get("ablation_study") else "No ablation rows available."
+    stack = ", ".join(research.get("tech_stack", [])) or "Not specified"
+    threats = "\n".join(f"- {item}" for item in paper.get("threats_to_validity", [])) or "Not specified"
+    formulas = "\n".join(f"{index}. `{formula}`" for index, formula in enumerate(paper.get("mathematical_formulas", []), 1))
+    metadata = research.get("project_metadata") or {}
+    metadata_text = "\n".join(f"- {key.replace('_', ' ').title()}: {value}" for key, value in metadata.items()) or "Not specified"
+    knowledge = research.get("knowledge_base", {})
+    inference = research.get("inference_engine", {})
+    coordination = research.get("agent_coordination", {})
+    sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"]),("7. Threats to Validity", threats)]
     refs = "\n".join(f"{i}. {item}" for i, item in enumerate(paper["references"], 1))
-    return "# " + paper["title"] + "\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Benchmark Matrix\n{table}\n\n## References\n{refs}\n"
+    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Mathematical Formulation\n{formulas}\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Benchmark Matrix\n{table}\n\n## Ablation Study\n{ablations}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## References\n{refs}\n"
 
 
 def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
@@ -101,8 +110,11 @@ def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
     formulas = "".join(f"<div class='formula'>{escape(formula)}</div>" for formula in paper["mathematical_formulas"])
     references = "".join(f"<li>{escape(reference)}</li>" for reference in paper["references"])
     models = pd.DataFrame(research.get("models_compared", [])).to_html(index=False, border=0, classes="results-table", columns=["name", "role", "backbone", "params_m", "latency_ms"])
-    datasets = pd.DataFrame(research.get("datasets_used", [])).to_html(index=False, border=0, classes="results-table", columns=["name", "modality", "sample_size", "primary_metric"])
+    datasets = pd.DataFrame(research.get("datasets_used", [])).to_html(index=False, border=0, classes="results-table", columns=["name", "modality", "sample_size", "primary_metric", "source_url"])
     table = pd.DataFrame(research.get("benchmark_table", [])).to_html(index=False, border=0, classes="results-table")
+    ablations = pd.DataFrame(research.get("ablation_study", [])).to_html(index=False, border=0, classes="results-table")
+    threats = "".join(f"<li>{escape(item)}</li>" for item in paper.get("threats_to_validity", []))
+    stack = escape(", ".join(research.get("tech_stack", [])) or "Not specified")
     return f"""<!doctype html>
 <html lang='en'><head><meta charset='utf-8'><title>{escape(paper['title'])}</title>
 <style>
@@ -127,11 +139,11 @@ p {{ font-size: 11px; text-align: justify; margin: 0 0 15px; }}
 footer {{ margin-top: 24px; padding-top: 10px; border-top: 1px solid #aeb8c7; color: #68758a; font: 10px Arial, sans-serif; text-align: center; }}
 @media print {{ body {{ background: white; }} .paper {{ margin: 0; padding: 0; box-shadow: none; }} }}
 </style></head><body><main class='paper'>
-<header><h1>{escape(paper['title'])}</h1><div class='meta'>Enterprise Academic Research Suite · IEEE-style generated manuscript</div></header>
+<header><h1>{escape(paper['title'])}</h1><div class='meta'>Học viện Công nghệ Bưu chính Viễn thông (PTIT) · Hệ thống thông minh<br>GVHD: Thầy Hoàng Mạnh Cường · SV: Trần Văn Đức · B23DCCN191</div></header>
 <div class='columns'>{body}<section><h2>Mathematical Formulation</h2>{formulas}</section></div>
-<div class='table-wrap'><h2>Models Used</h2>{models}<h2>Datasets Used</h2>{datasets}<h2>Benchmark Matrix</h2>{table}</div>
+<div class='table-wrap'><h2>Models Used</h2>{models}<h2>Datasets Used</h2>{datasets}<h2>Benchmark Matrix</h2>{table}<h2>Ablation Study</h2>{ablations}<h2>Technical Stack</h2><p>{stack}</p><h2>Evidence Status</h2><p>{escape(research.get('evidence_mode', 'Unknown'))}</p><h2>Threats to Validity</h2><ul>{threats}</ul></div>
 <div class='references'><h2>References</h2><ol>{references}</ol></div>
-<footer>Generated research artifact. Simulated metrics should be validated with instrumented experiments before publication.</footer>
+<footer>PTIT · Khoa Công nghệ Thông tin · Hệ thống thông minh · Thầy Hoàng Mạnh Cường · Trần Văn Đức (B23DCCN191)<br>Generated research artifact. Simulated metrics should be validated with instrumented experiments before publication.</footer>
 </main></body></html>"""
 
 
@@ -159,15 +171,21 @@ def render_header(result: dict[str, Any]) -> None:
     best = max((item["primary_metric"] for item in baseline_rows), default=0.0)
     gain = (proposed_row["primary_metric"] - best) / max(best, 1e-9) * 100
     st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Enterprise AI Research Lab · Multi-Agent Research Pipeline</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
-    cards = st.columns(4)
+    cards = st.columns(6)
     cards[0].metric("Primary Benchmark Score", f"{proposed_row['primary_metric']:.2f}", f"+{gain:.1f}% vs best baseline")
     cards[1].metric("Efficiency / Latency", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M params")
     cards[2].metric("Experimental Scope", f"{len(research['datasets_used'])} datasets", f"{len(research['models_compared'])} models")
     cards[3].metric("Automated Peer Review", f"{review['overall_score']:.1f} / 10", review["verdict"])
+    cards[4].metric("Reasoning Consistency", f"{research.get('reasoning_consistency_score', 0):.2f}", "agent routing audit")
+    cards[5].metric("Knowledge Retrieval Precision", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "catalog alignment")
 
 
 def render_plan(plan: dict[str, Any]) -> None:
     st.markdown(f"<div class='callout'><strong>Research Question</strong><br>{escape(plan['research_question'])}<br><br><strong>Core Hypothesis</strong><br>{escape(plan['hypothesis'])}</div>", unsafe_allow_html=True)
+    architecture = st.columns(3)
+    architecture[0].markdown("**Knowledge Base**\n\n" + "\n".join(f"- {item}" for item in plan.get("knowledge_base", {}).get("taxonomy", [])))
+    architecture[1].markdown("**Inference Engine**\n\n" + plan.get("inference_engine", {}).get("matching_strategy", "Not specified") + "\n\nDomain: " + plan.get("inference_engine", {}).get("selected_domain", "Not specified"))
+    architecture[2].markdown("**Multi-Agent Coordination**\n\n" + "\n".join(f"- {item}" for item in plan.get("agent_coordination", {}).get("agents", [])))
     st.subheader("📦 Datasets Catalog")
     columns = st.columns(3)
     for index, dataset in enumerate(plan["datasets_catalog"]):
@@ -175,10 +193,10 @@ def render_plan(plan: dict[str, Any]) -> None:
             st.markdown(f"<article class='glass-card'><h4>{escape(dataset['name'])}</h4><span class='badge'>{escape(dataset['modality'])}</span><p><b>Scale:</b> {escape(dataset['sample_size'])}<br><b>Input:</b> {escape(dataset['input_spec'])}<br><b>Metric:</b> {escape(dataset['primary_metric'])}</p><small>{escape(dataset['description'])}</small></article>", unsafe_allow_html=True)
     st.subheader("🧠 Model Zoo & Architecture Registry")
     models = pd.DataFrame(plan["models_catalog"])
-    st.dataframe(models[["name","role","backbone","params_m","flops_g","latency_ms","key_characteristic"]], use_container_width=True, hide_index=True)
+    st.dataframe(models[["name","role","backbone","params_m","flops_g","latency_ms","key_characteristic"]], width="stretch", hide_index=True)
     if HAS_PLOTLY:
         chart = models.melt(id_vars="name", value_vars=["params_m","latency_ms"], var_name="Measure", value_name="Value")
-        st.plotly_chart(px.bar(chart, x="name", y="Value", color="Measure", barmode="group", template="plotly_dark", title="Parameters vs latency"), use_container_width=True)
+        st.plotly_chart(px.bar(chart, x="name", y="Value", color="Measure", barmode="group", template="plotly_dark", title="Parameters vs latency"), width="stretch")
 
 
 def render_benchmarks(research: dict[str, Any]) -> None:
@@ -189,10 +207,22 @@ def render_benchmarks(research: dict[str, Any]) -> None:
     if HAS_PLOTLY:
         loss = curves.melt(id_vars="epoch", value_vars=["baseline_loss","proposed_loss"], var_name="Series", value_name="Loss")
         score = curves.melt(id_vars="epoch", value_vars=["baseline_score","proposed_score"], var_name="Series", value_name="Primary Metric")
-        left.plotly_chart(px.line(loss, x="epoch", y="Loss", color="Series", markers=True, template="plotly_dark", title="Training / validation loss"), use_container_width=True)
-        right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", color="Series", markers=True, template="plotly_dark", title="Performance growth"), use_container_width=True)
+        left.plotly_chart(px.line(loss, x="epoch", y="Loss", color="Series", markers=True, template="plotly_dark", title="Training / validation loss"), width="stretch")
+        right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", color="Series", markers=True, template="plotly_dark", title="Performance growth"), width="stretch")
     st.subheader("Benchmark & Ablation Matrix")
-    st.dataframe(pd.DataFrame(research["benchmark_table"]), use_container_width=True, hide_index=True)
+    benchmark = pd.DataFrame(research["benchmark_table"])
+    st.dataframe(benchmark, width="stretch", hide_index=True)
+    if HAS_PLOTLY:
+        left, middle, right = st.columns(3)
+        left.plotly_chart(px.bar(benchmark, x="model_name", y="primary_metric", color="role", title="Primary metric", template="plotly_dark"), width="stretch")
+        middle.plotly_chart(px.bar(benchmark, x="model_name", y="latency_ms", color="role", title="Latency (ms)", template="plotly_dark"), width="stretch")
+        right.plotly_chart(px.bar(benchmark, x="model_name", y="params_m", color="role", title="Parameters (M)" , template="plotly_dark"), width="stretch")
+    if research.get("ablation_study"):
+        st.subheader("Component Ablation Study")
+        ablation = pd.DataFrame(research["ablation_study"])
+        st.dataframe(ablation, width="stretch", hide_index=True)
+        if HAS_PLOTLY:
+            st.plotly_chart(px.bar(ablation, x="configuration", y="primary_metric", color="removed_component", title="Effect of removing each component", template="plotly_dark"), width="stretch")
     st.subheader("Key Empirical Findings")
     for finding in research["key_findings"]:
         st.markdown(f"- {finding}")
@@ -228,6 +258,15 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     for title, body in sections:
         st.subheader(title)
         st.write(body)
+    st.subheader("Mathematical Formulation")
+    for formula in paper.get("mathematical_formulas", []):
+        st.latex(formula)
+    st.subheader("Threats to Validity")
+    for threat in paper.get("threats_to_validity", []):
+        st.markdown(f"- {threat}")
+    st.caption(f"Evidence status: {research.get('evidence_mode', 'Unknown')}")
+    metadata = research.get("project_metadata") or {}
+    st.caption(f"{metadata.get('institution', 'PTIT')} · {metadata.get('subject', 'Hệ thống thông minh')} · GVHD: {metadata.get('instructor', 'N/A')} · SV: {metadata.get('student_name', 'N/A')} ({metadata.get('student_id', 'N/A')})")
     st.subheader("References")
     for index, reference in enumerate(paper["references"], 1):
         st.markdown(f"{index}. {reference}")
@@ -236,15 +275,17 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     model_column, dataset_column = st.columns(2)
     with model_column:
         st.markdown("**Models / Architectures**")
-        st.dataframe(pd.DataFrame(research["models_compared"])[["name", "role", "backbone", "params_m", "latency_ms"]], use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(research["models_compared"])[["name", "role", "backbone", "params_m", "latency_ms"]], width="stretch", hide_index=True)
     with dataset_column:
         st.markdown("**Datasets / Evaluation Splits**")
-        st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric"]], use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], width="stretch", hide_index=True)
+    st.markdown("**Technical stack**")
+    st.write(", ".join(research.get("tech_stack", [])))
     downloads = st.columns(4)
-    downloads[0].download_button("📥 Download Paper (.MD)", markdown, "research_paper.md", "text/markdown", use_container_width=True)
-    downloads[1].download_button("📥 Download Structured Data (.JSON)", json.dumps({"paper":paper,"research":research}, indent=2), "research_result.json", "application/json", use_container_width=True)
-    downloads[2].download_button("🖨️ Download Printable Report (.HTML)", ieee_html, "research_report.html", "text/html", use_container_width=True)
-    downloads[3].download_button("🖨️ Generate & Download IEEE-Style HTML Report", ieee_html, "ieee_style_research_report.html", "text/html", use_container_width=True)
+    downloads[0].download_button("📥 Download Paper (.MD)", markdown, "research_paper.md", "text/markdown", width="stretch")
+    downloads[1].download_button("📥 Download Structured Data (.JSON)", json.dumps({"paper":paper,"research":research}, indent=2), "research_result.json", "application/json", width="stretch")
+    downloads[2].download_button("🖨️ Download Printable Report (.HTML)", ieee_html, "research_report.html", "text/html", width="stretch")
+    downloads[3].download_button("🖨️ Generate & Download IEEE-Style HTML Report", ieee_html, "ieee_style_research_report.html", "text/html", width="stretch")
     st.divider()
     st.subheader("💬 Ask This Research Paper")
     question = st.text_input("Ask questions about this generated paper", placeholder="e.g., What are the baseline comparisons? What is the core limitation?", key="paper_question")
@@ -278,7 +319,7 @@ def main() -> None:
         st.text_input("Domain", key="domain")
         st.text_input("Primary Objective", key="objective")
         st.text_area("Constraints", key="constraints", height=75)
-        run_clicked = st.button("🚀 Run Autonomous Research Pipeline", type="primary", use_container_width=True)
+        run_clicked = st.button("🚀 Run Autonomous Research Pipeline", type="primary", width="stretch")
     if run_clicked or "full_pipeline_result" not in st.session_state:
         with st.status("🤖 Orchestrating Enterprise Multi-Agent Research Lab...", expanded=True) as status:
             execution_log = [
@@ -297,6 +338,12 @@ def main() -> None:
             st.session_state.full_pipeline_result = result
             status.update(label="✅ Pipeline completed · manuscript ready", state="complete", expanded=False)
     result = st.session_state["full_pipeline_result"]
+    if result.get("paper_mode") == "dynamic_fallback" and result.get("mode_used") == "live_gemini":
+        st.warning("Gemini đã lập kế hoạch live nhưng manuscript đang dùng writer fallback do phản hồi live chưa hợp lệ. Benchmark vẫn là Controlled Planning Simulation Estimate.")
+    elif result.get("paper_mode") == "dynamic_fallback":
+        st.warning("Đang dùng chế độ mô phỏng: benchmark, latency và training curves là số liệu kế hoạch, chưa phải kết quả chạy trên dataset thật. Đặt GEMINI_API_KEY để bật lập kế hoạch live; trước khi nộp bài vẫn cần chạy thực nghiệm và thay số liệu bằng đo đạc.")
+    else:
+        st.success("Đã bật live planner và live writer với Gemini. Các con số benchmark vẫn cần được xác minh bằng thực nghiệm thật trước khi công bố.")
     render_header(result)
     plan, research, paper, review = result["plan"], result["research"], result["paper"], result["review"]
     tabs = st.tabs(["🎯 Research Plan & Catalogs","📊 Benchmark & Ablation Charts","📐 Architecture & Mathematical Formulation","📄 Full Academic Paper","⚖️ Peer Review & Rubric"])

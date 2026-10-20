@@ -19,6 +19,45 @@ class DatasetSpec(BaseModel):
     input_spec: str = Field(..., description="Input format or feature shape")
     primary_metric: str = Field(..., description="Primary evaluation metric")
     description: str = Field(..., description="Dataset description and challenge")
+    source_url: str = Field(default="", description="Canonical dataset or benchmark URL")
+
+
+class AblationSpec(BaseModel):
+    configuration: str = Field(..., description="Ablation configuration")
+    removed_component: str = Field(..., description="Component removed from the proposed system")
+    primary_metric: float = Field(..., description="Primary metric for this configuration")
+    latency_ms: float = Field(..., ge=0.0, description="Measured or planned latency")
+    delta_vs_full: float = Field(..., description="Metric delta relative to the full configuration")
+    interpretation: str = Field(..., description="Interpretation of the ablation result")
+
+
+class ProjectMetadata(BaseModel):
+    institution: str
+    faculty: str
+    subject: str
+    instructor: str
+    student_name: str
+    student_id: str
+
+
+class KnowledgeBaseSpec(BaseModel):
+    taxonomy: list[str] = Field(default_factory=list)
+    routing_rules: list[str] = Field(default_factory=list)
+    catalog_scope: str = "Domain models, datasets, metrics, and implementation libraries"
+
+
+class InferenceEngineSpec(BaseModel):
+    matching_strategy: str = "Token-boundary matching with domain-priority routing"
+    selected_domain: str = ""
+    matched_keywords: list[str] = Field(default_factory=list)
+    routing_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    routed_configuration: list[str] = Field(default_factory=list)
+
+
+class AgentCoordinationSpec(BaseModel):
+    agents: list[str] = Field(default_factory=list)
+    protocol: str = "Shared typed state: plan -> evidence -> metrics -> manuscript -> review"
+    coordination_claim: str = "Agents expose intermediate artifacts for traceability and peer review."
 
 
 class ModelSpec(BaseModel):
@@ -43,6 +82,10 @@ class PlannerOutput(BaseModel):
     evaluation_metrics: list[str] = Field(..., min_length=1)
     experimental_plan: list[str] = Field(..., min_length=1)
     report_outline: list[str] = Field(..., min_length=1)
+    project_metadata: ProjectMetadata | None = None
+    knowledge_base: KnowledgeBaseSpec = Field(default_factory=KnowledgeBaseSpec)
+    inference_engine: InferenceEngineSpec = Field(default_factory=InferenceEngineSpec)
+    agent_coordination: AgentCoordinationSpec = Field(default_factory=AgentCoordinationSpec)
 
 
 class MetricCurvePoint(BaseModel):
@@ -71,7 +114,16 @@ class ResearcherOutput(BaseModel):
     models_compared: list[ModelSpec] = Field(..., min_length=1)
     training_curves: list[MetricCurvePoint] = Field(..., min_length=1)
     benchmark_table: list[AblationRow] = Field(..., min_length=1)
+    ablation_study: list[AblationSpec] = Field(default_factory=list)
     key_findings: list[str] = Field(..., min_length=1)
+    tech_stack: list[str] = Field(default_factory=list)
+    evidence_mode: str = Field(default="Controlled Planning Simulation Estimate")
+    reasoning_consistency_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    knowledge_retrieval_precision: float = Field(default=0.0, ge=0.0, le=1.0)
+    project_metadata: ProjectMetadata | None = None
+    knowledge_base: KnowledgeBaseSpec = Field(default_factory=KnowledgeBaseSpec)
+    inference_engine: InferenceEngineSpec = Field(default_factory=InferenceEngineSpec)
+    agent_coordination: AgentCoordinationSpec = Field(default_factory=AgentCoordinationSpec)
 
 
 class WriterOutput(BaseModel):
@@ -84,6 +136,7 @@ class WriterOutput(BaseModel):
     mathematical_formulas: list[str] = Field(..., min_length=1)
     experimental_results: str = Field(...)
     discussion: str = Field(...)
+    threats_to_validity: list[str] = Field(default_factory=list)
     conclusion: str = Field(...)
     references: list[str] = Field(..., min_length=1)
 
@@ -123,6 +176,7 @@ class PipelineRequest(BaseModel):
 
 class FullPipelineResponse(BaseModel):
     mode_used: Literal["live_gemini", "dynamic_fallback"]
+    paper_mode: Literal["live_gemini", "dynamic_fallback"] = "dynamic_fallback"
     plan: PlannerOutput
     research: ResearcherOutput
     paper: WriterOutput
