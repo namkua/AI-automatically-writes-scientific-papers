@@ -73,14 +73,19 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
         response = requests.post("http://localhost:8000/api/pipeline/run", json=payload, timeout=60)
         if response.ok:
             return response.json()
+        try:
+            return {"error": response.json().get("detail", "The request was rejected by the research validator.")}
+        except ValueError:
+            return {"error": f"The backend rejected the request with HTTP {response.status_code}."}
     except requests.RequestException:
         pass
     try:
         from backend.main import _run_pipeline_request
         from backend.schemas import PipelineRequest
         return _run_pipeline_request(PipelineRequest(**payload)).model_dump(mode="json")
-    except Exception:
-        return None
+    except Exception as error:
+        detail = getattr(error, "detail", str(error))
+        return {"error": str(detail)}
 
 
 def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
@@ -340,6 +345,10 @@ def main() -> None:
             result = run_pipeline(st.session_state.topic, st.session_state.domain, st.session_state.objective, st.session_state.constraints)
             if not result:
                 status.update(label="Pipeline unavailable", state="error")
+                st.stop()
+            if "error" in result:
+                status.update(label="Request rejected", state="error", expanded=True)
+                st.error(result["error"])
                 st.stop()
             st.session_state.full_pipeline_result = result
             status.update(label="✅ Pipeline completed · manuscript ready", state="complete", expanded=False)

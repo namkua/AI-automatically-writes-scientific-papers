@@ -172,6 +172,7 @@ class PipelineRequest(BaseModel):
     objective: str | None = Field(default=None)
     constraints: str | None = Field(default=None)
     api_key: str | None = Field(default=None)
+    require_verified_data: bool = Field(default=True, description="Refuse manuscript generation without verified local or downloaded data")
 
 
 class FullPipelineResponse(BaseModel):

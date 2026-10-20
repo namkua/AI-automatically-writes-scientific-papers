@@ -5,6 +5,7 @@ import hashlib
 import math
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -238,6 +239,31 @@ def _keyword_matches(text: str, keyword: str) -> bool:
 
 def _infer_domain(topic: str, domain: str | None, objective: str | None) -> str:
     return _topic_profile(topic, domain, objective)["domain"]
+
+
+def _verified_local_data(domain: str, root: str | None = None) -> list[str]:
+    data_root = Path(root or Path(__file__).resolve().parent.parent / "data")
+    if "nlp" not in domain.lower() and domain != "Natural Language Processing":
+        return []
+    candidates = {
+        "Shakespeare Char": data_root / "shakespeare_char" / "input.txt",
+        "Enwik8": data_root / "enwik8" / "enwik8",
+        "Text8": data_root / "text8" / "text8",
+    }
+    return [name for name, path in candidates.items() if path.is_file() and path.stat().st_size > 0]
+
+
+def _validate_verified_request(topic: str, domain: str | None, objective: str | None) -> None:
+    clean_topic = _normalize_topic(topic)
+    topic_text = clean_topic.lower()
+    known_keywords = {keyword for profile in _DOMAIN_PROFILES.values() for keyword in profile["keywords"]}
+    matched = [keyword for keyword in known_keywords if _keyword_matches(topic_text, keyword)]
+    if not matched:
+        raise HTTPException(status_code=422, detail="No recognized research signal was found. Use a concrete topic such as transformer language modeling, image segmentation, graph fraud detection, or speech recognition.")
+    inferred_domain = _infer_domain(clean_topic, domain, objective)
+    verified = _verified_local_data(inferred_domain)
+    if not verified:
+        raise HTTPException(status_code=422, detail=f"No verified local dataset is available for '{inferred_domain}'. Current strict mode only permits the local datasets: Shakespeare Char, Enwik8, and Text8.")
 
 
 def _knowledge_layer(topic: str, domain: str, objective: str | None, model_names: list[str], dataset_names: list[str]) -> tuple[KnowledgeBaseSpec, InferenceEngineSpec, AgentCoordinationSpec]:
@@ -812,6 +838,8 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     topic = _normalize_topic(request.topic)
     domain = request.domain or _infer_domain(topic, request.domain, request.objective)
     objective = request.objective or "Design a rigorous, reproducible, and evidence-driven study."
+    if request.require_verified_data:
+        _validate_verified_request(topic, request.domain, request.objective)
     api_key = request.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     plan = _maybe_live_plan(topic, domain, objective, request.constraints, api_key)
     mode_used = "live_gemini" if plan is not None else "dynamic_fallback"
