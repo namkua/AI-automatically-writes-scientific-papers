@@ -249,6 +249,8 @@ def _verified_local_data(domain: str, root: str | None = None) -> list[str]:
         "Shakespeare Char": data_root / "shakespeare_char" / "input.txt",
         "Enwik8": data_root / "enwik8" / "enwik8",
         "Text8": data_root / "text8" / "text8",
+        "AG News": data_root / "huggingface" / "ag_news" / "train.jsonl",
+        "IMDb Large Movie Review": data_root / "huggingface" / "imdb" / "train.jsonl",
     }
     return [name for name, path in candidates.items() if path.is_file() and path.stat().st_size > 0]
 
@@ -355,6 +357,13 @@ def _make_dataset_catalog(topic: str, domain: str | None) -> list[DatasetSpec]:
             DatasetSpec(name="Tatoeba Translation Benchmark", modality="Text / Parallel Sentences", sample_size="50,000 sentence pairs / held-out evaluation", input_spec="Multilingual parallel sentence pairs with language-direction labels", primary_metric="BLEU / chrF", description="Translation benchmark for measuring robustness across diverse language directions."),
         ]
     if profile["domain"] == "Natural Language Processing":
+        topic_text = topic.lower()
+        if any(term in topic_text for term in ("classification", "sentiment", "news", "text classifier")):
+            return [
+                DatasetSpec(name="AG News", modality="Text classification", sample_size="120k labeled news articles", input_spec="Article text with four topic labels", primary_metric="Accuracy / Macro-F1", description="Real-world news topic classification benchmark suitable for supervised transformer experiments."),
+                DatasetSpec(name="IMDb Large Movie Review", modality="Sentiment text", sample_size="50k labeled movie reviews", input_spec="Review text with binary sentiment labels", primary_metric="Accuracy / Macro-F1", description="Balanced sentiment benchmark for robust text classification and error analysis."),
+                DatasetSpec(name="Shakespeare Char", modality="Character-level text", sample_size="1.1 MB corpus / train-validation split", input_spec="Encoded character sequences with next-character targets", primary_metric="Validation loss", description="Local character-level corpus for a complementary language-modeling check."),
+            ]
         return [
             DatasetSpec(name="Shakespeare Char", modality="Character-level text", sample_size="1.1 MB corpus / train-validation split", input_spec="Encoded character sequences with next-character targets", primary_metric="Validation loss", description="Shakespeare play text used for character-level language modeling and qualitative generation."),
             DatasetSpec(name="Enwik8", modality="Character-level text", sample_size="100 MB Wikipedia corpus / train-validation split", input_spec="Raw Wikipedia characters stored as uint16 token ids", primary_metric="Validation loss", description="Standard 100 MB enwik8 compression and next-character prediction benchmark."),
