@@ -44,6 +44,11 @@ div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBl
 .stDownloadButton>button:hover,.stButton>button:hover{background:#17304d!important;border-color:var(--cyan)!important;color:#f8fbff!important}
 [data-testid="stSidebar"]{background:rgba(7,13,25,.96);border-right:1px solid var(--line)}
 .block-container{max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:2rem 2.3rem;margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .35rem;font-size:2.35rem}.hero p{color:#b9c8e2!important;margin:0}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
+</style>
+<style>
+[data-testid="stMetric"]{min-width:0!important}
+[data-testid="stMetric"] label{white-space:normal!important;line-height:1.2!important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{white-space:nowrap!important}
 </style>""", unsafe_allow_html=True)
 
 PRESETS = {
@@ -52,7 +57,7 @@ PRESETS = {
     "Spatio-Temporal Graph Neural Networks for Real-Time Financial Fraud Detection": {"domain":"Graph Learning / FinTech","objective":"Detect suspicious transaction patterns with high recall and low latency","constraints":"Imbalanced labels, temporal split, interpretable decisions"},
     "Contrastive Multimodal Learning for Automated Radiology Report Generation": {"domain":"Healthcare AI","objective":"Align radiology images and clinical language for accurate report generation","constraints":"Cross-modal alignment, clinical safety, external validation"},
 }
-CUSTOM = "Custom Topic (Tự nhập đề tài bất kỳ...)"
+CUSTOM = "Custom Topic (Enter any research topic...)"
 
 
 def apply_preset() -> None:
@@ -171,13 +176,14 @@ def render_header(result: dict[str, Any]) -> None:
     best = max((item["primary_metric"] for item in baseline_rows), default=0.0)
     gain = (proposed_row["primary_metric"] - best) / max(best, 1e-9) * 100
     st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Enterprise AI Research Lab · Multi-Agent Research Pipeline</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
-    cards = st.columns(6)
-    cards[0].metric("Primary Benchmark Score", f"{proposed_row['primary_metric']:.2f}", f"+{gain:.1f}% vs best baseline")
-    cards[1].metric("Efficiency / Latency", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M params")
-    cards[2].metric("Experimental Scope", f"{len(research['datasets_used'])} datasets", f"{len(research['models_compared'])} models")
-    cards[3].metric("Automated Peer Review", f"{review['overall_score']:.1f} / 10", review["verdict"])
-    cards[4].metric("Reasoning Consistency", f"{research.get('reasoning_consistency_score', 0):.2f}", "agent routing audit")
-    cards[5].metric("Knowledge Retrieval Precision", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "catalog alignment")
+    metric_rows = [st.columns(3), st.columns(3)]
+    cards = metric_rows[0] + metric_rows[1]
+    cards[0].metric("Benchmark Score", f"{proposed_row['primary_metric']:.2f}", f"+{gain:.1f}% vs baseline")
+    cards[1].metric("Latency", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M params")
+    cards[2].metric("Experiment Scope", f"{len(research['datasets_used'])} datasets", f"{len(research['models_compared'])} models")
+    cards[3].metric("Review Score", f"{review['overall_score']:.1f} / 10", review["verdict"])
+    cards[4].metric("Reasoning Consistency", f"{research.get('reasoning_consistency_score', 0):.2f}", "routing audit")
+    cards[5].metric("Knowledge Precision", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "catalog alignment")
 
 
 def render_plan(plan: dict[str, Any]) -> None:
@@ -271,7 +277,7 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     for index, reference in enumerate(paper["references"], 1):
         st.markdown(f"{index}. {reference}")
     st.subheader("🔬 Reproducibility: Models & Datasets Used")
-    st.caption("Các thành phần dưới đây là catalog được dùng để tạo benchmark và nội dung bài báo cho topic hiện tại.")
+    st.caption("These catalogs define the benchmark matrix and manuscript content for the current topic.")
     model_column, dataset_column = st.columns(2)
     with model_column:
         st.markdown("**Models / Architectures**")
@@ -323,10 +329,10 @@ def main() -> None:
     if run_clicked or "full_pipeline_result" not in st.session_state:
         with st.status("🤖 Orchestrating Enterprise Multi-Agent Research Lab...", expanded=True) as status:
             execution_log = [
-                ("🟢 [Planner Agent]", "Phân tích đề tài, trích xuất từ khóa miền, thiết lập giả thuyết nghiên cứu và xây dựng sơ đồ phân rã nhiệm vụ...", 0.45),
-                ("🟢 [Researcher Agent]", "Khởi tạo mô hình giả lập, sinh dữ liệu NumPy qua 15 epochs, tính toán loss/accuracy hội tụ và trích xuất ma trận benchmark...", 0.65),
-                ("🟢 [Writer Agent]", "Biên soạn bài báo khoa học chuẩn IEEE, tích hợp công thức LaTeX và tài liệu tham khảo...", 0.55),
-                ("🟢 [Reviewer Agent]", "Đánh giá tự động theo rubric học thuật, chấm điểm Novelty, Rigor, Clarity và đưa ra nhận xét chi tiết...", 0.5),
+                ("🟢 [Planner Agent]", "Extracting domain keywords, defining the hypothesis, and building the task decomposition...", 0.45),
+                ("🟢 [Researcher Agent]", "Building the benchmark matrix, convergence curves, datasets, and model catalog...", 0.65),
+                ("🟢 [Writer Agent]", "Composing the IEEE-style manuscript with equations, ablations, and references...", 0.55),
+                ("🟢 [Reviewer Agent]", "Scoring novelty, technical rigor, clarity, evidence, and reproducibility...", 0.5),
             ]
             for agent, message, duration in execution_log:
                 st.write(f"{agent} {message}")
@@ -339,11 +345,11 @@ def main() -> None:
             status.update(label="✅ Pipeline completed · manuscript ready", state="complete", expanded=False)
     result = st.session_state["full_pipeline_result"]
     if result.get("paper_mode") == "dynamic_fallback" and result.get("mode_used") == "live_gemini":
-        st.warning("Gemini đã lập kế hoạch live nhưng manuscript đang dùng writer fallback do phản hồi live chưa hợp lệ. Benchmark vẫn là Controlled Planning Simulation Estimate.")
+        st.warning("Gemini produced a live plan, but the manuscript uses the fallback writer because the live response was invalid. Benchmarks remain Controlled Planning Simulation Estimates.")
     elif result.get("paper_mode") == "dynamic_fallback":
-        st.warning("Đang dùng chế độ mô phỏng: benchmark, latency và training curves là số liệu kế hoạch, chưa phải kết quả chạy trên dataset thật. Đặt GEMINI_API_KEY để bật lập kế hoạch live; trước khi nộp bài vẫn cần chạy thực nghiệm và thay số liệu bằng đo đạc.")
+        st.warning("Simulation mode: benchmark, latency, and training curves are planning estimates, not measurements from a real dataset. Set GEMINI_API_KEY for live planning; validate all numbers with instrumented experiments before submission.")
     else:
-        st.success("Đã bật live planner và live writer với Gemini. Các con số benchmark vẫn cần được xác minh bằng thực nghiệm thật trước khi công bố.")
+        st.success("Live planner and writer are enabled with Gemini. Benchmark values still require validation with instrumented experiments before publication.")
     render_header(result)
     plan, research, paper, review = result["plan"], result["research"], result["paper"], result["review"]
     tabs = st.tabs(["🎯 Research Plan & Catalogs","📊 Benchmark & Ablation Charts","📐 Architecture & Mathematical Formulation","📄 Full Academic Paper","⚖️ Peer Review & Rubric"])
