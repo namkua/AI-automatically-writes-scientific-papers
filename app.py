@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from html import escape
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -239,6 +240,36 @@ def render_benchmarks(research: dict[str, Any]) -> None:
         st.markdown(f"- {finding}")
 
 
+def render_verified_datasets() -> None:
+    st.subheader("Verified Local Datasets")
+    st.caption("Only files present on this machine are marked Ready. Catalog-only datasets are never treated as measured evidence.")
+    data_root = Path(__file__).resolve().parent / "data"
+    entries = [
+        ("Shakespeare Char", data_root / "shakespeare_char" / "input.txt", "Character language modeling", "https://github.com/karpathy/char-rnn/blob/master/data/tinyshakespeare/input.txt"),
+        ("Enwik8", data_root / "enwik8" / "enwik8", "Character language modeling", "https://www.byronosa.com/enwik8"),
+        ("Text8", data_root / "text8" / "text8", "Character language modeling", "http://mattmahoney.net/dc/textdata.html"),
+        ("AG News", data_root / "huggingface" / "ag_news" / "train.jsonl", "Text classification", "https://huggingface.co/datasets/fancyzhx/ag_news"),
+        ("IMDb Large Movie Review", data_root / "huggingface" / "imdb" / "train.jsonl", "Sentiment classification", "https://huggingface.co/datasets/stanfordnlp/imdb"),
+    ]
+    rows = []
+    for name, path, task, source in entries:
+        ready = path.is_file() and path.stat().st_size > 0
+        rows.append({"Dataset": name, "Task": task, "Status": "Ready" if ready else "Not downloaded", "Size (MB)": round(path.stat().st_size / 1_000_000, 2) if ready else 0.0, "Source": source})
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    available = [row["Dataset"] for row in rows if row["Status"] == "Ready"]
+    if not available:
+        st.info("No verified local dataset is available yet. Run the preparation command shown below.")
+        return
+    selected = st.selectbox("Inspect a local dataset", available, key="verified_dataset_select")
+    selected_path = next(path for name, path, _, _ in entries if name == selected)
+    if selected_path.suffix == ".jsonl":
+        sample = pd.read_json(selected_path, lines=True).head(20)
+        st.dataframe(sample, width="stretch", hide_index=True)
+    else:
+        st.info(f"Binary/text corpus available at `{selected_path.relative_to(data_root.parent)}` ({selected_path.stat().st_size:,} bytes).")
+    st.code(".\\env\\Scripts\\python.exe data\\prepare_hf_text.py --dataset ag_news", language="powershell")
+
+
 def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
     st.subheader("Architecture Flow")
     st.code("Input data → Domain encoder → Task-aware signal selection → Proposed model → Prediction + uncertainty", language="text")
@@ -361,12 +392,13 @@ def main() -> None:
         st.success("Live planner and writer are enabled with Gemini. Benchmark values still require validation with instrumented experiments before publication.")
     render_header(result)
     plan, research, paper, review = result["plan"], result["research"], result["paper"], result["review"]
-    tabs = st.tabs(["🎯 Research Plan & Catalogs","📊 Benchmark & Ablation Charts","📐 Architecture & Mathematical Formulation","📄 Full Academic Paper","⚖️ Peer Review & Rubric"])
+    tabs = st.tabs(["🎯 Research Plan & Catalogs","📊 Benchmark & Ablation Charts","🗃️ Verified Datasets","📐 Architecture & Mathematical Formulation","📄 Full Academic Paper","⚖️ Peer Review & Rubric"])
     with tabs[0]: render_plan(plan)
     with tabs[1]: render_benchmarks(research)
-    with tabs[2]: render_method(plan, paper)
-    with tabs[3]: render_paper(paper, research)
-    with tabs[4]: render_review(review)
+    with tabs[2]: render_verified_datasets()
+    with tabs[3]: render_method(plan, paper)
+    with tabs[4]: render_paper(paper, research)
+    with tabs[5]: render_review(review)
 
 
 if __name__ == "__main__":
