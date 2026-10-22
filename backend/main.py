@@ -257,15 +257,10 @@ def _verified_local_data(domain: str, root: str | None = None) -> list[str]:
 
 def _validate_verified_request(topic: str, domain: str | None, objective: str | None) -> None:
     clean_topic = _normalize_topic(topic)
-    topic_text = clean_topic.lower()
-    known_keywords = {keyword for profile in _DOMAIN_PROFILES.values() for keyword in profile["keywords"]}
-    matched = [keyword for keyword in known_keywords if _keyword_matches(topic_text, keyword)]
-    if not matched:
-        raise HTTPException(status_code=422, detail="No recognized research signal was found. Use a concrete topic such as transformer language modeling, image segmentation, graph fraud detection, or speech recognition.")
     inferred_domain = _infer_domain(clean_topic, domain, objective)
     verified = _verified_local_data(inferred_domain)
     if not verified:
-        raise HTTPException(status_code=422, detail=f"No verified local dataset is available for '{inferred_domain}'. Current strict mode only permits the local datasets: Shakespeare Char, Enwik8, and Text8.")
+        raise HTTPException(status_code=422, detail=f"No verified local dataset is available for '{inferred_domain}'. Disable verified-data checking to use the configured dataset catalog.")
 
 
 def _knowledge_layer(topic: str, domain: str, objective: str | None, model_names: list[str], dataset_names: list[str]) -> tuple[KnowledgeBaseSpec, InferenceEngineSpec, AgentCoordinationSpec]:
@@ -493,10 +488,10 @@ def _build_dynamic_planner(topic: str, domain: str | None, objective: str | None
     datasets_catalog = _make_dataset_catalog(clean_topic, domain_name)
     models_catalog = _make_model_catalog(clean_topic, domain_name)
     return PlannerOutput(
-        title=f"{clean_topic}: A Topic-Aware Optimization Study",
+        title=f"{clean_topic}: A 2026-Inspired Research Synthesis",
         domain=domain_name,
         research_question=f"How can {clean_topic} be improved in a principled way while preserving robustness, scalability, and empirical validity?",
-        hypothesis=f"A task-aware design grounded in {domain_name} can improve performance over strong baselines by capturing the most informative signals while reducing noise and redundancy.",
+        hypothesis=f"A task-aware design grounded in {domain_name} can capture informative signals while reducing noise, redundancy, and unnecessary computation.",
         datasets_catalog=datasets_catalog,
         models_catalog=models_catalog,
         baseline_methods=[item.name for item in models_catalog if item.role == "Baseline"],
@@ -504,9 +499,9 @@ def _build_dynamic_planner(topic: str, domain: str | None, objective: str | None
         evaluation_metrics=[profile["metric"], "Calibration", "Latency", "Robustness gap"],
         experimental_plan=[
             "Construct normalized benchmark settings for the target task and dataset.",
-            "Train the baseline and proposed approach under the same protocol.",
+            "Train the proposed approach under a preregistered and reproducible protocol.",
             "Run ablation studies to isolate the contribution of the design choices.",
-            "Compare performance, stability, and efficiency under identical evaluation conditions."
+            "Measure performance, stability, efficiency, and failure modes under identical evaluation conditions."
         ],
         report_outline=[
             "Abstract",
@@ -741,6 +736,76 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
     )
 
 
+def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> WriterOutput:
+    topic = plan.title.split(":")[0]
+    proposed = next((model for model in research.models_compared if model.role == "Proposed"), research.models_compared[-1])
+    datasets = ", ".join(dataset.name for dataset in research.datasets_used)
+    metric = research.datasets_used[0].primary_metric
+    return WriterOutput(
+        title=plan.title,
+        abstract=(
+            f"This paper develops {proposed.name}, a new method for {topic} in {plan.domain}. "
+            f"The method is designed to select task-relevant evidence, control redundant computation, and expose uncertainty during inference. "
+            f"We formulate a reproducible study over {datasets}, using {metric} together with robustness, calibration, and latency measurements. "
+            "All numerical values in this demonstration are controlled planning estimates rather than completed experimental measurements. "
+            "The resulting research design provides a concrete path from a 2026 research direction to an independently testable scientific contribution."
+        ),
+        keywords=[plan.domain.lower(), "task-aware learning", "uncertainty", "efficient AI", "reproducible research"],
+        introduction=(
+            f"{topic} has become an important research direction because modern AI systems must remain reliable when inputs, tasks, and operating conditions change. "
+            f"Recent 2026 work has emphasized multimodal scientific models, autonomous reasoning, and resource-aware learning. "
+            f"This paper asks: {plan.research_question} "
+            "The objective is not to reproduce an existing paper or rank a collection of systems, but to turn a current research direction into a precise, independently testable method.\n\n"
+            "The contributions are threefold. First, we define an adaptive evidence-selection mechanism for the target task. "
+            "Second, we introduce a joint objective that couples task quality, sparsity, and consistency. "
+            "Third, we provide a reproducible evaluation protocol that reports uncertainty, failure modes, and resource use without presenting simulated values as measured facts."
+        ),
+        related_work=(
+            "Recent research in this area is moving toward foundation models that combine modalities, reasoning processes, and domain constraints. "
+            "The open problem is how to make such systems selective and auditable when the input distribution changes. "
+            "The proposed study addresses this gap by treating evidence selection, uncertainty, and computational budget as parts of one method rather than as separate post-processing steps. "
+            "The 2026 inspiration sources listed in the references motivate the research direction; they are not used as hidden performance claims."
+        ),
+        methodology=(
+            f"{proposed.name} uses {proposed.backbone.lower()} with a task-aware routing unit. "
+            "The router estimates the relevance of each input component, applies a differentiable gate, and propagates an uncertainty summary alongside the task representation. "
+            "Training uses the task objective, a sparsity penalty, and a consistency term across perturbed views. "
+            f"The proposed system is evaluated on {datasets} using a fixed data split, multiple random seeds, calibration analysis, and hardware profiling."
+        ),
+        mathematical_formulas=[
+            r"\mathcal{L}=\mathcal{L}_{task}+\lambda_s\lVert g\rVert_1+\lambda_c\mathcal{L}_{consistency}+\lambda_u\mathcal{L}_{uncertainty}",
+            r"g_i=\sigma\left(f_{\theta}(x_i,q)\right),\qquad z=\sum_{i=1}^{n}g_i h_i",
+            r"\mathrm{RiskCoverage}(c)=\mathbb{E}[\ell(y,\hat{y})\mid u(x)\leq c]",
+        ],
+        experimental_results=(
+            f"The demonstration protocol uses an NVIDIA A100 configuration, a fixed training schedule, and the datasets {datasets}. "
+            f"The primary metric is {metric}; secondary measurements include calibration error, robustness under controlled perturbations, parameter count, and latency. "
+            "The displayed curves and tables are planning estimates generated to make the experiment executable. A publication-ready result requires instrumented runs, confidence intervals, and an explicit error taxonomy."
+        ),
+        discussion=(
+            "The expected benefit is a model whose computation follows task-relevant evidence instead of processing every input component uniformly. "
+            "This can improve interpretability and reduce unnecessary computation, but the mechanism may fail when relevance signals are poorly calibrated or when the deployment distribution differs from the development data. "
+            "The proposed ablations therefore remove routing, sparsity, and consistency components one at a time to identify which design choices are necessary."
+        ),
+        threats_to_validity=[
+            "Dataset coverage may not represent the full deployment distribution.",
+            "Planning estimates are not measurements and must be replaced by multi-seed instrumented experiments.",
+            "Calibration quality can vary across domains, hardware, and input corruption types.",
+        ],
+        conclusion=(
+            f"This paper presented {proposed.name} for {topic}. The contribution is a self-contained research hypothesis with a formal objective, "
+            "an uncertainty-aware architecture, and a reproducible evaluation plan. The next step is to execute the protocol on the named datasets, "
+            "release configuration files, and report confidence intervals before making claims about scientific or deployment impact."
+        ),
+        references=[
+            "Nature Machine Intelligence (2026), Articles in 2026, https://www.nature.com/natmachintell/articles?year=2026",
+            "AAAI (2026), Proceedings of the Fortieth AAAI Conference on Artificial Intelligence, https://aaai.org/proceeding/aaai-40-2026/",
+            "ACL (2026), Accepted Main Conference Papers, https://2026.aclweb.org/program/accepted_papers/",
+            "IJCAI-ECAI (2026), Accepted Papers, https://2026.ijcai.org/accepted-papers/",
+        ],
+    )
+
+
 def _build_dynamic_reviewer(paper: WriterOutput, research: ResearcherOutput) -> ReviewerOutput:
     return ReviewerOutput(
         overall_score=8.7,
@@ -800,6 +865,7 @@ def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, cons
             "{title, domain, research_question, hypothesis, datasets_catalog:[{name, modality, sample_size, input_spec, primary_metric, description}], "
             "models_catalog:[{name, role, backbone, params_m, flops_g, latency_ms, key_characteristic}], baseline_methods:[str], proposed_method:str, "
             "evaluation_metrics:[str], experimental_plan:[str], report_outline:[str]}. "
+            "Generate one original proposed method, not a baseline-comparison paper. "
             f"Topic: {topic}; domain: {domain or 'AI research'}; objective: {objective or 'design a rigorous study'}; "
             f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets and flag any unavailable measurements as planned experiments."
         )
@@ -820,12 +886,12 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         "Return only valid JSON matching this exact schema: " + schema + ". "
         "Write a formal IEEE/NeurIPS-inspired manuscript in objective scientific English. "
         "Abstract must contain Context, Problem Gap, Proposed Expert Method, Quantitative Results, and Broader Impact. "
-        "Introduction must state exactly three methodological contributions. Related Work must compare backbone scaling, "
-        "domain priors, and adaptive computation. Methodology must include domain-correct LaTeX equations for input representation, "
+        "Introduction must state exactly three methodological contributions. Related Work must synthesize the research gap without presenting a baseline leaderboard. "
+        "Methodology must include domain-correct LaTeX equations for input representation, "
         "routing or attention/gating, and a joint loss combining task, sparsity, and consistency terms. "
-        "Experimental Results must name the A100 hardware, schedule, datasets, baselines, parameters, latency, and ablation study. "
+        "Experimental Results must name the A100 hardware, schedule, datasets, parameters, latency, and ablation study. "
         "Threats to Validity must address dataset bias, distribution shift, and hardware bounds. "
-        "Tie every performance claim to named datasets and baselines. Never describe planning estimates as measured facts. "
+        "Tie every performance claim to named datasets and the proposed method. Never describe planning estimates as measured facts and do not compare against baselines. "
         f"Topic: {plan.title}. Domain: {plan.domain}. Research question: {plan.research_question}. "
         f"Models: {json.dumps([item.model_dump() for item in plan.models_catalog])}. "
         f"Datasets: {json.dumps([item.model_dump() for item in research.datasets_used])}. "
@@ -857,7 +923,7 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     plan = _ensure_system_intelligence(plan, topic, domain, objective)
     research = _build_dynamic_research(plan)
     live_paper = _maybe_live_writer(plan, research, api_key)
-    paper = live_paper or _build_dynamic_writer(plan, research)
+    paper = live_paper or _build_synthesis_writer(plan, research)
     review = _build_dynamic_reviewer(paper, research)
     return FullPipelineResponse(mode_used=mode_used, paper_mode="live_gemini" if live_paper else "dynamic_fallback", plan=plan, research=research, paper=paper, review=review)
 
@@ -884,7 +950,7 @@ def generate_research_plan(payload: PlannerOutput) -> ResearcherOutput:
 def generate_writer_output(payload: dict[str, Any]) -> WriterOutput:
     plan = PlannerOutput.model_validate(payload.get("plan", {}))
     research = ResearcherOutput.model_validate(payload.get("research", {}))
-    return _build_dynamic_writer(plan, research)
+    return _build_synthesis_writer(plan, research)
 
 
 @app.post("/api/reviewer/generate", response_model=ReviewerOutput)

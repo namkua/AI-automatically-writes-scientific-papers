@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from io import BytesIO
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -36,7 +37,8 @@ st.markdown("""
 .stSelectbox .react-aria-ComboBox>div,.stSelectbox div:has(> input[role="combobox"]){background-color:#101a2d!important;color:#e8eefc!important;border:1px solid var(--line)!important;border-radius:10px!important}
 .stSelectbox input[role="combobox"]{background-color:transparent!important;color:#ffffff!important;-webkit-text-fill-color:#ffffff!important}
 .stSelectbox [role="option"]{background-color:#101a2d!important;color:#e8eefc!important}
-div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBlock pre,.stCodeBlock code{background:#101a2d!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important}
+div[data-testid="stCodeBlock"],div[data-testid="stCodeBlock"]>div,div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock pre,.stCodeBlock code{background:#101a2d!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important;border-color:var(--line)!important}
+div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCodeBlock pre *,.stCodeBlock code *{background:transparent!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important}
 .stTabs [role="tablist"]{background:#0a111f!important;overflow-x:auto!important;scrollbar-color:#50d9e9 #101a2d;white-space:nowrap}
 .stTabs [role="tab"]{background:#101a2d!important;color:#cbd5e1!important;white-space:nowrap!important}
 .stTabs [role="tab"][aria-selected="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid var(--cyan)!important}
@@ -50,11 +52,22 @@ div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBl
 [data-testid="stMetric"]{min-width:0!important}
 [data-testid="stMetric"] label{white-space:normal!important;line-height:1.2!important}
 [data-testid="stMetric"] [data-testid="stMetricValue"]{white-space:nowrap!important}
+.architecture-flow{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;background:linear-gradient(135deg,#101a2d,#172b48);border:1px solid rgba(80,217,233,.35);border-radius:14px;padding:1.1rem 1.25rem;margin:.35rem 0 1.15rem;box-shadow:0 12px 28px #0003}
+.architecture-flow .flow-step{display:inline-flex;align-items:center;min-height:2.35rem;padding:.55rem .8rem;border:1px solid rgba(135,160,202,.35);border-radius:9px;background:#1b3150;color:#f4f8ff!important;font-weight:700;line-height:1.25}
+.architecture-flow .flow-arrow{color:#50d9e9!important;font-size:1.25rem;font-weight:800}
+.dataset-command{background:#101a2d;border:1px solid rgba(135,160,202,.35);border-radius:12px;padding:1.05rem 1.25rem;margin-top:.55rem;overflow-x:auto}
+.dataset-command code{background:transparent!important;color:#f4f8ff!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;white-space:pre}
+.dataset-command .muted-command{color:#cbd5e1!important}
+.dataset-command .path-command{color:#50d9e9!important}
+.dataset-command .flag-command{color:#f59e0b!important}
+.architecture-code{background:#101a2d;border:1px solid rgba(135,160,202,.35);border-radius:12px;padding:1.2rem 1.35rem;margin-top:.55rem;overflow-x:auto}
+.architecture-code pre{margin:0;background:transparent!important;color:#e8eefc!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;line-height:1.55;white-space:pre}
 </style>""", unsafe_allow_html=True)
 
 PRESETS = {
     "Dynamic Attention Head Gating for Efficient Transformer Inference": {"domain":"NLP / Efficiency","objective":"Improve inference efficiency while preserving language modeling quality","constraints":"CPU-friendly evaluation, transparent ablations, reproducible metrics"},
     "Vision Transformer with Multi-Scale Patch Embedding for CIFAR-10 & Medical Imaging": {"domain":"Computer Vision","objective":"Improve visual representation quality across natural and medical images","constraints":"Compare multi-scale features, report latency and robustness"},
+    "Image Captioning with CLIP": {"domain":"Multimodal & Vision-Language","objective":"Generate faithful image captions using CLIP-aligned visual and textual representations","constraints":"Evaluate caption quality, cross-modal alignment, grounding, and hallucination risk"},
     "Spatio-Temporal Graph Neural Networks for Real-Time Financial Fraud Detection": {"domain":"Graph Learning / FinTech","objective":"Detect suspicious transaction patterns with high recall and low latency","constraints":"Imbalanced labels, temporal split, interpretable decisions"},
     "Contrastive Multimodal Learning for Automated Radiology Report Generation": {"domain":"Healthcare AI","objective":"Align radiology images and clinical language for accurate report generation","constraints":"Cross-modal alignment, clinical safety, external validation"},
 }
@@ -69,7 +82,13 @@ def apply_preset() -> None:
 
 
 def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> dict[str, Any] | None:
-    payload = {"topic": topic, "domain": domain, "objective": objective, "constraints": constraints}
+    payload = {
+        "topic": topic,
+        "domain": domain,
+        "objective": objective,
+        "constraints": constraints,
+        "require_verified_data": False,
+    }
     try:
         response = requests.post("http://localhost:8000/api/pipeline/run", json=payload, timeout=60)
         if response.ok:
@@ -158,6 +177,85 @@ footer {{ margin-top: 24px; padding-top: 10px; border-top: 1px solid #aeb8c7; co
 </main></body></html>"""
 
 
+def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=16 * mm,
+        leftMargin=16 * mm,
+        topMargin=15 * mm,
+        bottomMargin=15 * mm,
+        title=paper["title"],
+        author="Smart Research Lab",
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("PaperTitle", parent=styles["Title"], alignment=TA_CENTER, textColor=colors.HexColor("#183b63"), spaceAfter=8)
+    heading_style = ParagraphStyle("PaperHeading", parent=styles["Heading2"], textColor=colors.HexColor("#183b63"), spaceBefore=10, spaceAfter=5)
+    body_style = ParagraphStyle("PaperBody", parent=styles["BodyText"], leading=14, spaceAfter=7)
+    small_style = ParagraphStyle("PaperSmall", parent=styles["BodyText"], fontSize=8, leading=10)
+    story = [Paragraph(escape(paper["title"]), title_style)]
+    story.append(Paragraph("PTIT · Hệ thống thông minh · Smart Research Lab", small_style))
+    story.append(Spacer(1, 8))
+
+    sections = [
+        ("Abstract", paper["abstract"]),
+        ("Keywords", ", ".join(paper["keywords"])),
+        ("1. Introduction", paper["introduction"]),
+        ("2. Related Work", paper["related_work"]),
+        ("3. Proposed Methodology", paper["methodology"]),
+        ("4. Experimental Setup & Results", paper["experimental_results"]),
+        ("5. Discussion", paper["discussion"]),
+        ("6. Conclusion", paper["conclusion"]),
+    ]
+    for heading, content in sections:
+        story.extend([Paragraph(escape(heading), heading_style), Paragraph(escape(content).replace("\n", "<br/>"), body_style)])
+
+    story.append(Paragraph("Mathematical Formulation", heading_style))
+    for formula in paper.get("mathematical_formulas", []):
+        story.append(Paragraph(escape(formula), ParagraphStyle("Formula", parent=body_style, alignment=TA_CENTER, backColor=colors.HexColor("#f3f6fa"), borderColor=colors.HexColor("#278ea5"), borderWidth=1, borderPadding=6)))
+
+    story.append(Paragraph("Threats to Validity", heading_style))
+    for threat in paper.get("threats_to_validity", []):
+        story.append(Paragraph("• " + escape(threat), body_style))
+
+    def add_table(title: str, rows: list[list[Any]], widths: list[float]) -> None:
+        story.append(Paragraph(title, heading_style))
+        table = Table([[Paragraph(escape(str(cell)), small_style) for cell in row] for row in rows], colWidths=widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#183b63")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#c7d0dc")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f7f9fc")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(table)
+
+    models = research.get("models_compared", [])
+    add_table("Models Used", [["Name", "Role", "Backbone", "Params (M)", "Latency (ms)"]] + [
+        [item["name"], item["role"], item["backbone"], item["params_m"], item["latency_ms"]] for item in models
+    ], [42 * mm, 25 * mm, 58 * mm, 24 * mm, 25 * mm])
+    datasets = research.get("datasets_used", [])
+    add_table("Datasets Used", [["Dataset", "Modality", "Sample size", "Metric"]] + [
+        [item["name"], item["modality"], item["sample_size"], item["primary_metric"]] for item in datasets
+    ], [42 * mm, 38 * mm, 57 * mm, 37 * mm])
+    benchmark = research.get("benchmark_table", [])
+    add_table("Benchmark Matrix", [["Model", "Dataset", "Role", "Primary", "Latency"]] + [
+        [item["model_name"], item["dataset_name"], item["role"], item["primary_metric"], item["latency_ms"]] for item in benchmark
+    ], [40 * mm, 42 * mm, 25 * mm, 25 * mm, 25 * mm])
+    document.build(story)
+    return buffer.getvalue()
+
+
 def answer_paper_question(question: str, paper: dict[str, Any], research: dict[str, Any]) -> str:
     payload = {"question": question, "paper": paper, "research": research}
     try:
@@ -177,16 +275,13 @@ def answer_paper_question(question: str, paper: dict[str, Any], research: dict[s
 def render_header(result: dict[str, Any]) -> None:
     plan, research, review = result["plan"], result["research"], result["review"]
     proposed = next(item for item in research["models_compared"] if item["role"] == "Proposed")
-    baseline_rows = [item for item in research["benchmark_table"] if item["role"] == "Baseline"]
     proposed_row = next(item for item in research["benchmark_table"] if item["role"] == "Proposed")
-    best = max((item["primary_metric"] for item in baseline_rows), default=0.0)
-    gain = (proposed_row["primary_metric"] - best) / max(best, 1e-9) * 100
     st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Enterprise AI Research Lab · Multi-Agent Research Pipeline</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
     metric_rows = [st.columns(3), st.columns(3)]
     cards = metric_rows[0] + metric_rows[1]
-    cards[0].metric("Benchmark Score", f"{proposed_row['primary_metric']:.2f}", f"+{gain:.1f}% vs baseline")
+    cards[0].metric("Planned Primary Score", f"{proposed_row['primary_metric']:.2f}", "controlled estimate")
     cards[1].metric("Latency", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M params")
-    cards[2].metric("Experiment Scope", f"{len(research['datasets_used'])} datasets", f"{len(research['models_compared'])} models")
+    cards[2].metric("Experiment Scope", f"{len(research['datasets_used'])} datasets", "1 proposed method")
     cards[3].metric("Review Score", f"{review['overall_score']:.1f} / 10", review["verdict"])
     cards[4].metric("Reasoning Consistency", f"{research.get('reasoning_consistency_score', 0):.2f}", "routing audit")
     cards[5].metric("Knowledge Precision", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "catalog alignment")
@@ -204,8 +299,8 @@ def render_plan(plan: dict[str, Any]) -> None:
         with columns[index % 3]:
             st.markdown(f"<article class='glass-card'><h4>{escape(dataset['name'])}</h4><span class='badge'>{escape(dataset['modality'])}</span><p><b>Scale:</b> {escape(dataset['sample_size'])}<br><b>Input:</b> {escape(dataset['input_spec'])}<br><b>Metric:</b> {escape(dataset['primary_metric'])}</p><small>{escape(dataset['description'])}</small></article>", unsafe_allow_html=True)
     st.subheader("🧠 Model Zoo & Architecture Registry")
-    models = pd.DataFrame(plan["models_catalog"])
-    st.dataframe(models[["name","role","backbone","params_m","flops_g","latency_ms","key_characteristic"]], width="stretch", hide_index=True)
+    models = pd.DataFrame([item for item in plan["models_catalog"] if item["role"] == "Proposed"])
+    st.dataframe(models[["name","backbone","params_m","flops_g","latency_ms","key_characteristic"]], width="stretch", hide_index=True)
     if HAS_PLOTLY:
         chart = models.melt(id_vars="name", value_vars=["params_m","latency_ms"], var_name="Measure", value_name="Value")
         st.plotly_chart(px.bar(chart, x="name", y="Value", color="Measure", barmode="group", template="plotly_dark", title="Parameters vs latency"), width="stretch")
@@ -217,18 +312,19 @@ def render_benchmarks(research: dict[str, Any]) -> None:
     curves = curves[curves["dataset_name"] == selected]
     left, right = st.columns(2)
     if HAS_PLOTLY:
-        loss = curves.melt(id_vars="epoch", value_vars=["baseline_loss","proposed_loss"], var_name="Series", value_name="Loss")
-        score = curves.melt(id_vars="epoch", value_vars=["baseline_score","proposed_score"], var_name="Series", value_name="Primary Metric")
+        loss = curves[["epoch", "proposed_loss"]].rename(columns={"proposed_loss": "Loss"})
+        score = curves[["epoch", "proposed_score"]].rename(columns={"proposed_score": "Primary Metric"})
         left.plotly_chart(px.line(loss, x="epoch", y="Loss", color="Series", markers=True, template="plotly_dark", title="Training / validation loss"), width="stretch")
         right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", color="Series", markers=True, template="plotly_dark", title="Performance growth"), width="stretch")
-    st.subheader("Benchmark & Ablation Matrix")
+    st.subheader("Proposed Method Evaluation Matrix")
     benchmark = pd.DataFrame(research["benchmark_table"])
+    benchmark = benchmark[benchmark["role"] == "Proposed"]
     st.dataframe(benchmark, width="stretch", hide_index=True)
     if HAS_PLOTLY:
         left, middle, right = st.columns(3)
-        left.plotly_chart(px.bar(benchmark, x="model_name", y="primary_metric", color="role", title="Primary metric", template="plotly_dark"), width="stretch")
-        middle.plotly_chart(px.bar(benchmark, x="model_name", y="latency_ms", color="role", title="Latency (ms)", template="plotly_dark"), width="stretch")
-        right.plotly_chart(px.bar(benchmark, x="model_name", y="params_m", color="role", title="Parameters (M)" , template="plotly_dark"), width="stretch")
+        left.plotly_chart(px.bar(benchmark, x="model_name", y="primary_metric", title="Primary metric", template="plotly_dark"), width="stretch")
+        middle.plotly_chart(px.bar(benchmark, x="model_name", y="latency_ms", title="Latency (ms)", template="plotly_dark"), width="stretch")
+        right.plotly_chart(px.bar(benchmark, x="model_name", y="params_m", title="Parameters (M)" , template="plotly_dark"), width="stretch")
     if research.get("ablation_study"):
         st.subheader("Component Ablation Study")
         ablation = pd.DataFrame(research["ablation_study"])
@@ -267,18 +363,36 @@ def render_verified_datasets() -> None:
         st.dataframe(sample, width="stretch", hide_index=True)
     else:
         st.info(f"Binary/text corpus available at `{selected_path.relative_to(data_root.parent)}` ({selected_path.stat().st_size:,} bytes).")
-    st.code(".\\env\\Scripts\\python.exe data\\prepare_hf_text.py --dataset ag_news", language="powershell")
+    st.markdown(
+        '<div class="dataset-command"><code>.<span class="muted-command">\\env\\Scripts\\python.exe</span> '
+        '<span class="path-command">data\\prepare_hf_text.py</span> '
+        '<span class="flag-command">--dataset</span> ag_news</code></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
     st.subheader("Architecture Flow")
-    st.code("Input data → Domain encoder → Task-aware signal selection → Proposed model → Prediction + uncertainty", language="text")
+    flow_steps = [
+        "Input data",
+        "Domain encoder",
+        "Task-aware signal selection",
+        "Proposed model",
+        "Prediction + uncertainty",
+    ]
+    flow_html = '<div class="architecture-flow">'
+    for index, step in enumerate(flow_steps):
+        if index:
+            flow_html += '<span class="flow-arrow" aria-hidden="true">→</span>'
+        flow_html += f'<span class="flow-step">{escape(step)}</span>'
+    flow_html += "</div>"
+    st.markdown(flow_html, unsafe_allow_html=True)
     st.write(paper["methodology"])
     st.subheader("Mathematical Formulation")
     for formula in paper["mathematical_formulas"]:
         st.latex(formula)
     st.subheader(f"PyTorch Core: {plan['proposed_method']}")
-    st.code("""class TaskAwareBlock(nn.Module):
+    pytorch_code = """class TaskAwareBlock(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.norm = nn.LayerNorm(dim)
@@ -288,12 +402,20 @@ def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
     def forward(self, x):
         weights = torch.sigmoid(self.gate(self.norm(x)))
         return x + weights * self.projection(self.norm(x))
-""", language="python")
+"""
+    st.markdown(
+        f'<div class="architecture-code"><pre>{escape(pytorch_code)}</pre></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
-    markdown = paper_markdown(paper, research)
-    ieee_html = ieee_html_report(paper, research)
+    export_research = {
+        **research,
+        "models_compared": [item for item in research.get("models_compared", []) if item.get("role") == "Proposed"],
+        "benchmark_table": [item for item in research.get("benchmark_table", []) if item.get("role") == "Proposed"],
+    }
+    pdf = pdf_report(paper, export_research)
     st.title(paper["title"])
     st.caption("Full Academic Manuscript · IEEE/NeurIPS-inspired structure")
     sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"])]
@@ -317,17 +439,19 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     model_column, dataset_column = st.columns(2)
     with model_column:
         st.markdown("**Models / Architectures**")
-        st.dataframe(pd.DataFrame(research["models_compared"])[["name", "role", "backbone", "params_m", "latency_ms"]], width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(research["models_compared"])[["name", "backbone", "params_m", "latency_ms"]], width="stretch", hide_index=True)
     with dataset_column:
         st.markdown("**Datasets / Evaluation Splits**")
         st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], width="stretch", hide_index=True)
     st.markdown("**Technical stack**")
     st.write(", ".join(research.get("tech_stack", [])))
-    downloads = st.columns(4)
-    downloads[0].download_button("📥 Download Paper (.MD)", markdown, "research_paper.md", "text/markdown", width="stretch")
-    downloads[1].download_button("📥 Download Structured Data (.JSON)", json.dumps({"paper":paper,"research":research}, indent=2), "research_result.json", "application/json", width="stretch")
-    downloads[2].download_button("🖨️ Download Printable Report (.HTML)", ieee_html, "research_report.html", "text/html", width="stretch")
-    downloads[3].download_button("🖨️ Generate & Download IEEE-Style HTML Report", ieee_html, "ieee_style_research_report.html", "text/html", width="stretch")
+    st.download_button(
+        "📥 Download Research Paper (.PDF)",
+        pdf,
+        "research_paper.pdf",
+        "application/pdf",
+        width="stretch",
+    )
     st.divider()
     st.subheader("💬 Ask This Research Paper")
     question = st.text_input("Ask questions about this generated paper", placeholder="e.g., What are the baseline comparisons? What is the core limitation?", key="paper_question")
