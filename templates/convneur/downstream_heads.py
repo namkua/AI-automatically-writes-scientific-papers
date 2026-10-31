@@ -3,6 +3,12 @@ Downstream Heads for ConvNeur Backbone
 Implements:
 1. ConvNeurForDetection: Bounding Box prediction on top of multi-scale features.
 2. ConvNeurForSegmentation: Dense pixel mask prediction (UPerNet / FPN Lite).
+
+NOTE ON BENCHMARKING & SURROGATES:
+In this template, Penn-Fudan is employed as a lightweight, small-scale surrogate sanity check
+(~170 images) to verify multi-scale feature propagation and convergence of downstream heads.
+Penn-Fudan DOES NOT directly represent or benchmark large-scale tasks such as ADE20K (semantic segmentation)
+or MS COCO (object detection). Metrics produced on Penn-Fudan must not be reported as ADE20K/COCO performance.
 """
 
 import torch
@@ -12,9 +18,8 @@ import torch.nn.functional as F
 
 class ConvNeurForSegmentation(nn.Module):
     """
-    Semantic segmentation head on top of ConvNeur backbone.
-    Mimics ADE20K UPerNet evaluation from CVPR 2026 paper.
-    Combines deep semantic features (stage 4) with spatial detail (stage 2/1).
+    Semantic segmentation head on top of ConvNeur backbone (FPN-lite architecture).
+    Used with small-scale surrogate dataset (Penn-Fudan) for sanity check of segmentation capabilities.
     """
     def __init__(self, backbone, num_classes=2):
         super().__init__()
@@ -59,7 +64,7 @@ class ConvNeurForSegmentation(nn.Module):
 class ConvNeurForDetection(nn.Module):
     """
     Object detection head on top of ConvNeur backbone.
-    Mimics MS COCO evaluation from CVPR 2026 paper.
+    Used with small-scale surrogate datasets (Penn-Fudan / VOC subset) for sanity check of detection pipeline.
     Predicts normalized bounding boxes [cx, cy, w, h] and class/objectness score.
     """
     def __init__(self, backbone, num_classes=20, num_queries=1):

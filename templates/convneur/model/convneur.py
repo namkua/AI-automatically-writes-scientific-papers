@@ -1,12 +1,53 @@
+"""
+ConvNeur: Global-Local Decoupled Vision Architecture (CVPR 2026)
+Official Paper: "Efficiency Follows Global-Local Decoupling"
+Original Codebase: https://github.com/NUST-Machine-Intelligence-Laboratory/ConvNeur
+Author / Lab: NUST Machine Intelligence Laboratory (Zhenyu Yang et al.)
+License: Apache License 2.0
+
+Attributions & Submodules:
+- NeuralMemory adapted from titans-pytorch (MIT License, Copyright 2025 Phil Wang)
+  URL: https://github.com/lucidrains/titans-pytorch
+- Normalization (LayerNorm channels_first, GlobalNorm/GRN) adapted from ConvNeXt V2 (Apache License 2.0)
+  URL: https://github.com/facebookresearch/ConvNeXt-V2
+"""
+
+from typing import Union, List, Tuple, Optional
+import torch
+import torch.nn as nn
 from einops import rearrange
 from timm.layers import trunc_normal_, DropPath
-from model.titans_pytorch.neural_memory import *
-from model.norm import *
+
+from model.titans_pytorch.neural_memory import NeuralMemory
+from model.norm import LayerNorm, GlobalNorm
+
+
+def default(val, d):
+    return val if val is not None else d
+
 
 class Block(nn.Module):
-    def __init__(self, dim, use_mem=True, mem_dim=64, chunk_size=64, use_mem_batch_size=True, 
-                 accept_weight_residual=False, drop_path=0.1, default_step_transform_max_lr=1e-1):
+    """
+    ConvNeur Decoupled Block:
+    - Locality Branch: 7x7 Depthwise Conv + Inverted Bottleneck (PW) + GELU + GlobalNorm (GRN)
+    - Global Branch: Neural Memory (Titans-style test-time memory) with learned modulation gate
+    """
+    def __init__(
+        self,
+        dim: int,
+        use_mem: bool = True,
+        mem_dim: int = 64,
+        chunk_size: int = 64,
+        use_mem_batch_size: bool = True,
+        accept_weight_residual: bool = False,
+        drop_path: float = 0.1,
+        default_step_transform_max_lr: float = 1e-1
+    ):
         super().__init__()
+        self.dim = dim
+        self.use_mem = use_mem
+        self.accept_weight_residual = accept_weight_residual
+
         # Local branch
         self.local_dw = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)
         self.local_pw = nn.Sequential(
@@ -16,31 +57,45 @@ class Block(nn.Module):
             GlobalNorm(4 * dim),
             nn.Linear(4 * dim, dim)
         )
-        # Global branch
-        self.use_mem = use_mem
+
+        # Global memory branch
         if use_mem:
             self.proj_in = nn.Conv2d(dim, mem_dim, kernel_size=1)
-            self.mem = NeuralMemory(dim=mem_dim, chunk_size=chunk_size, 
-                                    batch_size=(chunk_size*16) if use_mem_batch_size else None, 
-                                    qkv_receives_diff_views=False, accept_weight_residual=accept_weight_residual, 
-                                    attn_pool_chunks=True, qk_rmsnorm=True, momentum=True, momentum_order=1, 
-                                    default_step_transform_max_lr=default_step_transform_max_lr,
-                                    per_parameter_lr_modulation=True)
+            self.mem = NeuralMemory(
+                dim=mem_dim,
+                chunk_size=chunk_size,
+                batch_size=(chunk_size * 16) if use_mem_batch_size else None,
+                qkv_receives_diff_views=False,
+                accept_weight_residual=accept_weight_residual,
+                attn_pool_chunks=True,
+                qk_rmsnorm=True,
+                momentum=True,
+                momentum_order=1,
+                default_step_transform_max_lr=default_step_transform_max_lr,
+                per_parameter_lr_modulation=True
+            )
             self.proj_out = nn.Conv2d(mem_dim, dim, kernel_size=1)
+
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
-    def forward(self, x, prev_weights=None):
+    def forward(self, x: torch.Tensor, prev_weights=None) -> Tuple[torch.Tensor, Optional[object]]:
         x_in = x
         x = self.local_dw(x)
-        x = x.permute(0, 2, 3, 1) # B, H, W, C
+        x = x.permute(0, 2, 3, 1)  # B, H, W, C
         x = self.local_pw(x)
-        x = x.permute(0, 3, 1, 2) # B, C, H, W
+        x = x.permute(0, 3, 1, 2)  # B, C, H, W
 
         if self.use_mem:
             b, c, h, w = x_in.size()
             x_mem = self.proj_in(x_in)
             x_mem = rearrange(x_mem, "b c h w -> b (h w) c").contiguous()
-            x_mem, next_neural_mem_cache = self.mem(x_mem, prev_weights=prev_weights)
+
+            # Pass prev_weights only if the memory module is configured to accept weight residuals
+            mem_kwargs = {}
+            if getattr(self.mem, "to_learned_weight_residual_mix", None) is not None and prev_weights is not None:
+                mem_kwargs["prev_weights"] = prev_weights
+
+            x_mem, next_neural_mem_cache = self.mem(x_mem, **mem_kwargs)
             mem_weight_residual = next_neural_mem_cache.updates
             x_mem = rearrange(x_mem, "b (h w) c -> b c h w", h=h, w=w).contiguous()
             x_mem = self.proj_out(x_mem)
@@ -54,12 +109,33 @@ class Block(nn.Module):
 
 
 class ConvNeur(nn.Module):
-    def __init__(self, in_chans=3, num_classes=1000, depths=None, dims=None, drop_path_rate=0., head_init_scale=1.,
-                 mem_dim=64, chunk_size=196, use_mem_batch_size=True, default_step_transform_max_lr=1e-1):
+    """
+    ConvNeur Backbone:
+    Hierarchical 4-stage architecture with global-local decoupling and memory recurrence across stages.
+    """
+    def __init__(
+        self,
+        in_chans: int = 3,
+        num_classes: int = 1000,
+        depths: Optional[List[int]] = None,
+        dims: Optional[List[int]] = None,
+        drop_path_rate: float = 0.,
+        head_init_scale: float = 1.,
+        mem_dim: int = 64,
+        chunk_size: Union[int, List[int], Tuple[int, ...]] = 196,
+        use_mem_batch_size: bool = True,
+        default_step_transform_max_lr: float = 1e-1
+    ):
         super().__init__()
         dims = default(dims, [96, 192, 384, 768])
         depths = default(depths, [2, 2, 6, 2])
 
+        if isinstance(chunk_size, (list, tuple)):
+            chunk_sizes = list(chunk_size)
+        else:
+            chunk_sizes = [chunk_size] * 4
+
+        # Downsample stem + stage transitions
         self.downsample_layers = nn.ModuleList()
         stem = nn.Sequential(
             nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
@@ -69,21 +145,43 @@ class ConvNeur(nn.Module):
         for i in range(3):
             downsample_layer = nn.Sequential(
                 LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(dims[i], dims[i+1], kernel_size=2, stride=2),
+                nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
 
+        # 4 hierarchical stages
         self.stages = nn.ModuleList()
-        dp_rates=[x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))] 
+        dp_rates = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
         cur = 0
+        prev_has_mem = False
+
         for i in range(4):
-            stage = nn.Sequential(
-                *[Block(dim=dims[i], use_mem=(j==0), mem_dim=mem_dim, chunk_size=chunk_size,
-                        use_mem_batch_size=use_mem_batch_size, accept_weight_residual=(i + j != 0),
-                        drop_path=dp_rates[cur + j], default_step_transform_max_lr=default_step_transform_max_lr
-                       ) for j in range(depths[i])]
-            )
-            self.stages.append(stage)
+            stage_blocks = []
+            cs = chunk_sizes[i]
+            # NeuralMemory requires chunk_size >= 2 when attention pooling chunks is active
+            stage_use_mem = (cs >= 2)
+            accept_residual = (prev_has_mem and stage_use_mem)
+
+            for j in range(depths[i]):
+                blk_use_mem = (j == 0 and stage_use_mem)
+                blk_accept_residual = (j == 0 and accept_residual)
+                stage_blocks.append(
+                    Block(
+                        dim=dims[i],
+                        use_mem=blk_use_mem,
+                        mem_dim=mem_dim,
+                        chunk_size=cs if blk_use_mem else 16,
+                        use_mem_batch_size=use_mem_batch_size,
+                        accept_weight_residual=blk_accept_residual,
+                        drop_path=dp_rates[cur + j],
+                        default_step_transform_max_lr=default_step_transform_max_lr
+                    )
+                )
+
+            if stage_use_mem:
+                prev_has_mem = True
+
+            self.stages.append(nn.ModuleList(stage_blocks))
             cur += depths[i]
 
         self.norm = nn.LayerNorm(dims[-1], eps=1e-6)
@@ -99,7 +197,7 @@ class ConvNeur(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward_features(self, x):
+    def forward_features(self, x: torch.Tensor) -> List[torch.Tensor]:
         mem = None
         out_list = []
         for i in range(4):
@@ -109,7 +207,7 @@ class ConvNeur(nn.Module):
             out_list.append(x)
         return out_list
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.forward_features(x)[-1]
         x = self.head(self.norm(x.mean([-2, -1])))
         return x

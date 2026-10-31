@@ -1,9 +1,14 @@
 """
-ConvNeur Experiment Script — Multi-Task Vision Architecture (CVPR 2026 Standard)
-Evaluates ConvNeur across all 3 CVPR 2026 paper tasks:
-1. Image Classification  (Tiny-ImageNet-200, surrogate for ImageNet-1K)
-2. Semantic Segmentation (Penn-Fudan Segmentation, surrogate for ADE20K)
-3. Object Detection      (Penn-Fudan Detection, surrogate for MS COCO)
+ConvNeur Experiment Script — Vision Architecture (CVPR 2026 Template)
+Evaluates ConvNeur on:
+1. Image Classification: CIFAR-10 (32x32, 10 classes)
+2. Semantic Segmentation: Penn-Fudan Masks (surrogate / small-scale sanity check, not ADE20K)
+3. Object Detection: VOC subset / Penn-Fudan Boxes (surrogate / small-scale sanity check, not MS COCO)
+
+NOTE:
+Penn-Fudan is strictly a small-scale sanity check (~170 pedestrian images) to ensure
+multi-scale downstream heads execute, calculate losses, and backpropagate gradients.
+It is NOT a benchmark for full-scale ADE20K or MS COCO.
 """
 
 import argparse
@@ -30,7 +35,6 @@ if current_dir not in sys.path:
 from model import build_model
 from model.convneur import ConvNeur, Block
 from cifar10_loader import CIFAR10HF
-from tiny_imagenet import TinyImageNet
 from pennfudan import PennFudanDataset
 from voc_dataset import VOCDetection
 from downstream_heads import ConvNeurForSegmentation, ConvNeurForDetection
@@ -182,7 +186,7 @@ def compute_miou(preds, targets, num_classes=2):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TASK 1: IMAGE CLASSIFICATION (CIFAR-10, surrogate for ImageNet-1K)
+# TASK 1: IMAGE CLASSIFICATION (CIFAR-10)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_classification_task(data_path="./data", device="mps", epochs=3, batch_size=128, max_steps=None):
@@ -274,12 +278,13 @@ def run_classification_task(data_path="./data", device="mps", epochs=3, batch_si
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TASK 2: SEMANTIC SEGMENTATION (Penn-Fudan Pedestrian Masks)
+# TASK 2: SEMANTIC SEGMENTATION (Penn-Fudan Surrogate Sanity Check, not ADE20K)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_segmentation_task(data_path="./data", device="mps", epochs=5, batch_size=16, max_steps=None):
     print("\n" + "="*65)
-    print(f"▶ TASK 2: SEMANTIC SEGMENTATION (Penn-Fudan | {epochs} Epochs)")
+    print(f"▶ TASK 2: SEMANTIC SEGMENTATION (Penn-Fudan surrogate check | {epochs} Epochs)")
+    print("  [Notice] Penn-Fudan is a small-scale sanity check (~170 images), not ADE20K.")
     print("="*65)
     train_ds = PennFudanDataset(root=data_path, task="segmentation", split="train", img_size=128)
     test_ds  = PennFudanDataset(root=data_path, task="segmentation", split="test",  img_size=128)
@@ -349,12 +354,13 @@ def run_segmentation_task(data_path="./data", device="mps", epochs=5, batch_size
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TASK 3: OBJECT DETECTION (Pascal VOC 2007 — 20 Classes)
+# TASK 3: OBJECT DETECTION (Pascal VOC 2007 Subset — Surrogate Sanity Check, not MS COCO)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_detection_task(data_path="./data", device="mps", epochs=10, batch_size=32, max_steps=None):
     print("\n" + "="*65)
-    print(f"▶ TASK 3: OBJECT DETECTION (Pascal VOC 2007 | {epochs} Epochs)")
+    print(f"▶ TASK 3: OBJECT DETECTION (Pascal VOC 2007 surrogate check | {epochs} Epochs)")
+    print("  [Notice] VOC subset is a small-scale sanity check, not full MS COCO.")
     print("="*65)
     train_ds = VOCDetection(root=data_path, split="train", img_size=128)
     test_ds  = VOCDetection(root=data_path, split="val",   img_size=128)
@@ -482,7 +488,7 @@ def main():
     print(f"Device: {args.device} | Target Directory: {args.out_dir}")
     print("#"*65)
 
-    # 1. Classification (Tiny-ImageNet-200)
+    # 1. Classification (CIFAR-10)
     cls_res = run_classification_task(
         data_path=args.data_path,
         device=args.device,
@@ -491,7 +497,7 @@ def main():
         max_steps=args.max_steps,
     )
 
-    # 2. Semantic Segmentation (Penn-Fudan Masks)
+    # 2. Semantic Segmentation (Penn-Fudan Surrogate Masks)
     seg_res = run_segmentation_task(
         data_path=args.data_path,
         device=args.device,
@@ -499,7 +505,7 @@ def main():
         max_steps=args.max_steps,
     )
 
-    # 3. Object Detection (Penn-Fudan Boxes)
+    # 3. Object Detection (Pascal VOC Surrogate Boxes)
     det_res = run_detection_task(
         data_path=args.data_path,
         device=args.device,

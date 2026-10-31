@@ -1,9 +1,13 @@
 """
-Option 2: Multi-Task Evaluation for ConvNeur (CVPR 2026 Simulation)
-Evaluates ConvNeur across all 3 vision tasks from the original paper:
-1. Image Classification  (Tiny-ImageNet-200, surrogate for ImageNet-1K)
-2. Object Detection      (Penn-Fudan Detection, surrogate for MS COCO)
-3. Semantic Segmentation (Penn-Fudan Segmentation, surrogate for ADE20K)
+Option 2: Multi-Task Evaluation for ConvNeur (Pipeline Sanity Check)
+Evaluates ConvNeur multi-scale features across vision tasks:
+1. Image Classification  (CIFAR-10)
+2. Object Detection      (Penn-Fudan Detection — small-scale surrogate sanity check, not MS COCO)
+3. Semantic Segmentation (Penn-Fudan Segmentation — small-scale surrogate sanity check, not ADE20K)
+
+NOTE:
+Penn-Fudan is solely a lightweight surrogate sanity check (~170 images) for validating pipeline execution,
+not a direct replacement or benchmark for ADE20K or MS COCO.
 """
 
 import argparse

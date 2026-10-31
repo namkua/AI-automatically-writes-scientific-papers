@@ -1,8 +1,16 @@
 """
-Tiny-ImageNet-200 Dataset Loader for PyTorch
+Tiny-ImageNet-200 Dataset Loader for PyTorch (Optional / Extension)
 Downloads and prepares Tiny-ImageNet-200 (Stanford CS231N).
 200 classes, 100,000 train images (500 per class), 10,000 val images (50 per class).
 Image size: 64x64x3.
+
+Attribution:
+- Stanford CS231N Tiny ImageNet Visual Recognition Challenge.
+  URL: https://cs231n.stanford.edu/
+
+NOTE:
+The default ConvNeur baseline in this repository evaluates on CIFAR-10.
+Tiny-ImageNet is an optional experimental loader for higher-resolution scaling studies.
 """
 
 import os

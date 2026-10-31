@@ -1,12 +1,24 @@
+"""
+ConvNeur Model Builder Factory
+Provides standard model configurations (m1, m2, m3, m4) scaled for both:
+- ImageNet (img_size >= 128): chunk_size = [196, 196, 196, 49]
+- CIFAR / Small Scale (img_size < 128): chunk_size = [16, 16, 4, 1]
+"""
+
 from model.convneur import ConvNeur
 
-def build_model(scale="m1", num_classes=1000, img_size=224):
+
+def build_model(scale: str = "m1", num_classes: int = 10, img_size: int = 32) -> ConvNeur:
     """
     Factory function for ConvNeur models.
-    Supports ImageNet (img_size=224, chunk_size=196) and CIFAR/toy (img_size=32, chunk_size=16).
+    Supports ImageNet (img_size >= 128) and CIFAR-10 / small scale (img_size < 128).
     """
-    chunk_size = 196 if img_size >= 128 else 16
-    use_mem_batch = True if img_size >= 128 else False
+    if img_size >= 128:
+        chunk_size = [196, 196, 196, 49]
+        use_mem_batch = True
+    else:
+        chunk_size = [16, 16, 4, 1]
+        use_mem_batch = False
 
     scales = {
         "m1": {"depths": [2, 2, 6, 2], "dims": [40, 80, 160, 320], "mem_dim": 80},
