@@ -165,6 +165,19 @@ def _ensure_gap_and_proposal_sections(paper: WriterOutput, plan: PlannerOutput) 
             "measured findings unless the evidence label explicitly says Measured.\n\n"
             + methodology
         )
+    existing_models = [model.name for model in plan.models_catalog]
+    baselines = [model.name for model in plan.models_catalog if model.role == "Baseline"]
+    proposed = next((model.name for model in plan.models_catalog if model.role == "Proposed"), plan.proposed_method)
+    if "comparison with existing methods" not in paper.experimental_results.lower():
+        comparison = (
+            f"Comparison with Existing Methods. The proposed method, {proposed}, is "
+            f"compared against the established baselines {', '.join(baselines)} "
+            f"under the same datasets, metrics, and resource-reporting protocol. "
+            f"The complete comparison set is {', '.join(existing_models)}. "
+            "All generated values retain their evidence labels; simulated or "
+            "planned values are not presented as measured results."
+        )
+        paper.experimental_results = comparison + "\n\n" + paper.experimental_results.strip()
     paper.related_work = related_work
     paper.methodology = methodology
     return paper
@@ -399,6 +412,18 @@ def _knowledge_layer(topic: str, domain: str, objective: str | None, model_names
 
 
 def _ensure_system_intelligence(plan: PlannerOutput, topic: str, domain: str, objective: str | None) -> PlannerOutput:
+    roles = {model.role for model in plan.models_catalog}
+    if "Baseline" not in roles or "Proposed" not in roles:
+        fallback_models = _make_model_catalog(topic, domain)
+        existing_names = {model.name for model in plan.models_catalog}
+        plan.models_catalog = plan.models_catalog + [
+            model for model in fallback_models if model.name not in existing_names
+        ]
+        roles = {model.role for model in plan.models_catalog}
+    if "Baseline" not in roles or "Proposed" not in roles:
+        raise ValueError("Planner must provide at least one baseline and one proposed model.")
+    plan.baseline_methods = [model.name for model in plan.models_catalog if model.role == "Baseline"]
+    plan.proposed_method = next(model.name for model in plan.models_catalog if model.role == "Proposed")
     knowledge_base, inference_engine, coordination = _knowledge_layer(
         topic,
         domain,
@@ -1108,8 +1133,8 @@ def ask_paper_question(payload: dict[str, Any]) -> dict[str, str]:
 
 @app.post("/api/pipeline/run", response_model=FullPipelineResponse)
 def run_pipeline(payload: PipelineRequest) -> FullPipelineResponse:
-    if not payload.topic or len(payload.topic.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Topic must be at least 3 characters long.")
+    if not payload.topic or not payload.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
     return _run_pipeline_request(payload)
 
 
