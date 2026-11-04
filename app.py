@@ -86,6 +86,23 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 .architecture-code{background:var(--code);border:1px solid var(--line);border-radius:12px;padding:1.2rem 1.35rem;margin-top:.55rem;overflow-x:auto}
 .architecture-code pre{margin:0;background:transparent!important;color:var(--ink)!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;line-height:1.55;white-space:pre}
 .pdf-preview{background:#f4f6fa;border:1px solid rgba(135,160,202,.3);border-radius:16px;padding:.6rem;overflow:hidden}
+.final-contrast{color:#FAFAFA!important}
+div.block-container{padding-top:1.5rem!important;padding-bottom:2rem!important}
+.badge{background:#262730!important;color:#FFFFFF!important;border:1px solid #454752}
+.domain-badge{background:#FF4B4B!important;color:#FFFFFF!important}
+.glass-card,.callout,[data-testid="stMetric"],[data-testid="stExpander"]{background:#262730!important;border-color:#454752!important;color:#FAFAFA!important}
+.glass-card h4,.glass-card p,.glass-card small,.callout,.callout strong,
+[data-testid="stMetric"],[data-testid="stMetric"] label,[data-testid="stMetric"] [data-testid="stMetricValue"],
+[data-testid="stExpander"] *{color:#FAFAFA!important}
+[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,
+[data-testid="stSelectbox"] [data-baseweb="select"]>div,div[data-baseweb="select"]>div,[role="option"]{
+  background:#262730!important;color:#FAFAFA!important;-webkit-text-fill-color:#FAFAFA!important
+}
+div[data-testid="stCodeBlock"],div[data-testid="stCodeBlock"]>div,div[data-testid="stCodeBlock"] pre,
+div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock pre,.stCodeBlock code,
+.architecture-code,.dataset-command{background:#1E1E1E!important;color:#FAFAFA!important}
+[data-testid="stDataFrame"],[data-testid="stDataFrame"]>div,.stDataFrame,.stTable{max-width:100%!important;overflow-x:auto!important}
+.chat-response{background:#262730!important;color:#FAFAFA!important;border:1px solid #363945!important;border-radius:8px;padding:1rem;margin-top:.75rem;line-height:1.55;overflow-wrap:anywhere}
 [data-testid="stSidebar"]{min-width:18rem;max-width:22rem}
 @media (max-width: 760px){.block-container{width:calc(100% - 1rem);padding-left:.5rem;padding-right:.5rem}.hero h1{font-size:1.5rem}.stTabs [data-baseweb="tab"]{font-size:.78rem;padding:.35rem}.architecture-flow{gap:.35rem}.architecture-flow .flow-step{font-size:.82rem}}
 </style>""", unsafe_allow_html=True)
@@ -400,7 +417,7 @@ def _render_pdf_open_button(pdf: bytes) -> None:
     </style>
     """
     import streamlit.components.v1 as components
-    components.html(component_html, height=48, scrolling=False)
+    components.html(component_html, height=60, scrolling=False)
 
 
 def _latex_escape(value: Any) -> str:
@@ -760,7 +777,7 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     if question.strip():
         with st.spinner("Đang phân tích bản thảo..."):
             answer = answer_paper_question(question, paper, research)
-        st.markdown(f"<div class='callout'><strong>Research Assistant</strong><br>{escape(answer)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='chat-response'><strong>Research Assistant</strong><br>{escape(answer)}</div>", unsafe_allow_html=True)
 
 
 def render_artifacts() -> None:
