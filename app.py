@@ -309,8 +309,6 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
                     story.append(Image(BytesIO(formula_image), width=150 * mm, height=18 * mm))
                 else:
                     story.append(Paragraph(escape(_clean_formula(formula)), ParagraphStyle("FormulaFallback", parent=body_style, alignment=TA_CENTER, backColor=colors.HexColor("#f3f6fa"), borderColor=colors.HexColor("#278ea5"), borderWidth=1, borderPadding=6)))
-        if heading == "4. Experiments & Comparative Evaluation":
-
     story.append(Paragraph("Threats to Validity", heading_style))
     for threat in paper.get("threats_to_validity", []):
         story.append(Paragraph("• " + escape(threat), body_style))
