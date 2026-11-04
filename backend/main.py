@@ -59,55 +59,62 @@ CORE MANDATE — EXPLICIT PROPOSED IDEA:
    disables the central new component.
 
 WRITING AND EVIDENCE PRINCIPLES:
-4. Target approximately 3,000+ words of dense, specific academic prose when
+4. Abstract hygiene: write one 150-250 word paragraph, use each sentence once,
+   and do not repeat an evaluation disclaimer or summary clause.
+5. Target approximately 3,000+ words of dense, specific academic prose when
    the provider budget permits. Explain structural choices, DRAM/SRAM
    bandwidth, KV-cache or document-context memory, multimodal token
    alignment, memory movement, kernel overhead, and empirical behavior.
    Never pad with repeated claims or generic praise.
-5. Avoid AI-template prose. Do not repeat the abstract's claim in the
+6. Avoid AI-template prose. Do not repeat the abstract's claim in the
    introduction, discussion, or conclusion, and do not use filler such as
    "in this section", "it is worth noting", or "the results clearly
    demonstrate". Every paragraph must add a distinct technical observation,
    design trade-off, limitation, or reproducibility detail.
-6. Write in formal academic English with these sections and subsections:
+7. Write in formal academic English with these sections and subsections:
    Abstract and Keywords; 1.1 Context and bottleneck; 1.2 limitations of
    current methods; 1.3 contributions; 2.1-2.3 Related Work and research gap;
    3.1 architecture and preprocessing; 3.2 streamlined formulations; 3.3
    retrieval/context or inference optimization; 4.1 setup and hardware; 4.2
    comparative evaluation; 4.3 ablations; 5 discussion and failure modes;
    6 conclusion and future directions; References.
-7. In Section 3, define tensor/vector/matrix shapes and symbols, give explicit
+8. In Section 3, define tensor/vector/matrix shapes and symbols, give explicit
    Input -> preprocessing -> forward pass -> output pseudo-logic, and explain
    gradient flow and hyperparameter sensitivity. Analyze time and space
    complexity for the actual domain and accelerator constraints; do not claim
    O(N log N) or O(N) unless the algorithm and assumptions justify it.
-8. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
+9. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
    a gating/routing rule, a joint regularized loss, and optionally one
    complexity expression. Define symbols near first use. Replace algebra
    walls with data-flow descriptions, pseudocode, and implementation logic.
-9. In Section 4, explain why each observed or simulated number changes.
+10. In Section 4, explain why each observed or simulated number changes.
    Interpret cache behavior, memory bandwidth, tensor shapes, kernel overhead,
    sequence length, noise, and batch-size effects when relevant. For every
    ablation, state the component removed, the quality/latency delta and
    percentage change, and the mechanism that explains the change. Label these
    as planned or simulated unless measured evidence is supplied.
-10. Compare four relevant baseline families under a matched protocol. For
+11. Compare four relevant baseline families under a matched protocol. For
    document/PDF/RAG topics, discuss text-only RAG, naive PDF parsing,
    chunking-only pipelines, and static multimodal encoders; report latency,
    VRAM, retrieval Precision/Recall@K, non-text table/image retrieval, and
    Accuracy@0.85, Accuracy@0.90, and Accuracy@0.95 when those metrics apply.
    For other domains, adapt the metrics instead of forcing PDF-RAG terminology
    or Q/K/V notation.
-11. Use the supplied benchmark rows and preserve every evidence_type label.
+12. Use the supplied benchmark rows and preserve every evidence_type label.
    Literature Baseline values are references, Controlled Simulation values are
    planning estimates, and Measured values require actual execution evidence.
    Never invent exact measurements, datasets, authors, DOIs, venues, or
    future papers. Do not convert a planned or simulated improvement into a
    measured result.
-12. Cite only real, verifiable seminal sources. Use contextual IEEE-style
+13. Cite only real, verifiable seminal sources. Use contextual IEEE-style
    inline citations such as [1] and [2] only when the matching reference is
    present. Explain what each cited baseline contributes and how it differs
    from the proposed mechanism. Never fabricate citation numbers or sources.
+
+14. Place equations directly in Section 3 prose and benchmark/ablation analysis
+    directly in Section 4 prose. Do not defer core evidence to an appendix.
+15. Never present simulated or planned values as measured results. A completed
+    empirical tone is allowed only when the supplied evidence_type is Measured.
 
 Return JSON matching WriterOutput exactly. Put detailed prose in section
 fields, not in an unstructured summary.
@@ -143,23 +150,39 @@ def _normalize_topic(topic: str) -> str:
 
 
 def _academic_abstract(text: str) -> str:
-    additions = (
-        " The evaluation contract defines the task metric, comparator set, "
-        "resource budget, evidence status, and conditions required for replication. "
-        "The analysis also separates expected gains from unresolved questions, "
-        "including sensitivity to random seeds, data shifts, numerical precision, "
-        "and accelerator-specific scheduling. This distinction makes the manuscript "
-        "useful as a research plan while preventing simulated values from being "
-        "mistaken for completed measurements. The proposed protocol is therefore "
-        "intended to support transparent follow-up experiments rather than replace them."
-    )
+    text = _deduplicate_prose(text)
+    additions = [
+        "The protocol fixes the task metric, comparator set, resource budget, and reporting conditions.",
+        "Numerical claims retain their evidence status so the study can be reproduced without overstating validation.",
+        "The resulting design makes quality, efficiency, and failure modes auditable under one matched evaluation protocol.",
+        "This framing separates a testable research contribution from unsupported claims of deployment readiness.",
+    ]
     words = text.split()
-    while len(words) < 250:
-        text += additions
+    for addition in additions:
+        text = f"{text.rstrip()} {addition}"
         words = text.split()
-    if len(words) <= 300:
-        return text
-    return " ".join(words[:300]).rstrip(".,;:") + "."
+        if len(words) >= 150:
+            break
+    if len(words) > 250:
+        text = " ".join(words[:250]).rstrip(".,;:") + "."
+    return text
+
+
+def _deduplicate_prose(text: str) -> str:
+    """Remove repeated sentences while preserving paragraph order."""
+    seen: set[str] = set()
+    paragraphs: list[str] = []
+    for paragraph in str(text).split("\n\n"):
+        sentences = re.split(r"(?<=[.!?])\s+", paragraph.strip())
+        unique = []
+        for sentence in sentences:
+            normalized = re.sub(r"\s+", " ", sentence).strip().lower()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                unique.append(sentence.strip())
+        if unique:
+            paragraphs.append(" ".join(unique))
+    return "\n\n".join(paragraphs)
 
 
 def _ensure_gap_and_proposal_sections(paper: WriterOutput, plan: PlannerOutput) -> WriterOutput:
@@ -651,7 +674,7 @@ def _build_dynamic_planner(topic: str, domain: str | None, objective: str | None
     datasets_catalog = _make_dataset_catalog(clean_topic, domain_name)
     models_catalog = _make_model_catalog(clean_topic, domain_name)
     return PlannerOutput(
-        title=f"{clean_topic}: A 2026-Inspired Research Synthesis",
+        title=f"{clean_topic}: A Topic-Aware Evaluation",
         domain=domain_name,
         research_question=f"How can {clean_topic} be improved in a principled way while preserving robustness, scalability, and empirical validity?",
         hypothesis=f"A task-aware design grounded in {domain_name} can capture informative signals while reducing noise, redundancy, and unnecessary computation.",
@@ -924,7 +947,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
     return WriterOutput(
         title=plan.title,
         abstract=(
-            f"This paper develops {proposed.name}, a new method for {topic} in {plan.domain}. "
+            f"We propose {proposed.name} for {topic} in {plan.domain}. "
             f"The method is designed to select task-relevant evidence, control redundant computation, and expose uncertainty during inference. "
             f"We formulate a reproducible study over {datasets}, using {metric} together with robustness, calibration, and latency measurements. "
             "All numerical values in this demonstration are controlled planning estimates rather than completed experimental measurements. "

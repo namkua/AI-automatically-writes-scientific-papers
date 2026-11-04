@@ -165,9 +165,11 @@ def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     knowledge = research.get("knowledge_base", {})
     inference = research.get("inference_engine", {})
     coordination = research.get("agent_coordination", {})
-    sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experiments & Comparative Evaluation", paper["experimental_results"]),("5. Discussion & Failure Mode Analysis", paper["discussion"]),("6. Conclusion & Future Directions", paper["conclusion"]),("Threats to Validity", threats)]
+    methodology = paper["methodology"] + f"\n\n### Mathematical Formulation\n{formulas}"
+    experiments = paper["experimental_results"] + f"\n\n### Benchmark Matrix\n{table}\n\n### Ablation Study\n{ablations}"
+    sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", methodology),("4. Experiments & Comparative Evaluation", experiments),("5. Discussion & Failure Mode Analysis", paper["discussion"]),("6. Conclusion & Future Directions", paper["conclusion"]),("Threats to Validity", threats)]
     refs = "\n".join(f"{i}. {item}" for i, item in enumerate(paper["references"], 1))
-    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Mathematical Formulation\n{formulas}\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Benchmark Matrix\n{table}\n\n## Ablation Study\n{ablations}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## 7. References\n{refs}\n"
+    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## 7. References\n{refs}\n"
 
 
 def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
@@ -282,17 +284,32 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
             if block:
                 story.append(Paragraph(escape(_plain_academic_text(block)).replace("\n", "<br/>"), body_style))
 
+    def add_table(title: str, rows: list[list[Any]], widths: list[float]) -> None:
+        story.append(Paragraph(title, heading_style))
+        table = Table([[Paragraph(escape(str(cell)), small_style) for cell in row] for row in rows], colWidths=widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#183b63")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#c7d0dc")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f7f9fc")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(table)
+
     for heading, content in sections:
         story.append(Paragraph(escape(heading), heading_style))
         add_academic_text(content)
-
-    story.append(Paragraph("Mathematical Formulation", heading_style))
-    for formula in paper.get("mathematical_formulas", []):
-        formula_image = _formula_image(formula)
-        if formula_image:
-            story.append(Image(BytesIO(formula_image), width=150 * mm, height=18 * mm))
-        else:
-            story.append(Paragraph(escape(_clean_formula(formula)), ParagraphStyle("FormulaFallback", parent=body_style, alignment=TA_CENTER, backColor=colors.HexColor("#f3f6fa"), borderColor=colors.HexColor("#278ea5"), borderWidth=1, borderPadding=6)))
+        if heading == "3. Proposed Methodology":
+            story.append(Paragraph("Mathematical Formulation", heading_style))
+            for formula in paper.get("mathematical_formulas", []):
+                formula_image = _formula_image(formula)
+                if formula_image:
+                    story.append(Image(BytesIO(formula_image), width=150 * mm, height=18 * mm))
+                else:
+                    story.append(Paragraph(escape(_clean_formula(formula)), ParagraphStyle("FormulaFallback", parent=body_style, alignment=TA_CENTER, backColor=colors.HexColor("#f3f6fa"), borderColor=colors.HexColor("#278ea5"), borderWidth=1, borderPadding=6)))
+        if heading == "4. Experiments & Comparative Evaluation":
 
     story.append(Paragraph("Threats to Validity", heading_style))
     for threat in paper.get("threats_to_validity", []):
@@ -709,6 +726,28 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         f"<span class='domain-badge'>{escape(str(research.get('inference_engine', {}).get('selected_domain', 'AI Research')))}</span></section>",
         unsafe_allow_html=True,
     )
+    action_columns = st.columns(3)
+    with action_columns[0]:
+        st.download_button(
+            "📥 Tải bài báo PDF",
+            pdf,
+            "research_paper.pdf",
+            "application/pdf",
+            key="download_paper_pdf_top",
+            width="stretch",
+        )
+    with action_columns[1]:
+        _render_pdf_open_button(pdf)
+    with action_columns[2]:
+        st.download_button(
+            "📦 Tải toàn bộ artifacts (.ZIP)",
+            st.session_state["zip_bytes"],
+            "research_artifacts.zip",
+            "application/zip",
+            key="download_research_zip_top",
+            width="stretch",
+        )
+
     st.markdown("#### Xem trước bản thảo")
     try:
         import pymupdf as fitz
@@ -723,54 +762,6 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         document.close()
     except (ImportError, RuntimeError, ValueError) as error:
         st.warning(f"Không thể dựng ảnh xem trước PDF: {error}. Hãy tải file PDF bên dưới.")
-    action_column, open_column = st.columns(2)
-    with action_column:
-        st.download_button(
-            "📥 Tải bài báo PDF",
-            pdf,
-            "research_paper.pdf",
-            "application/pdf",
-            width="stretch",
-        )
-    with open_column:
-        _render_pdf_open_button(pdf)
-    st.download_button(
-        "📦 Tải toàn bộ artifacts (.ZIP)",
-        st.session_state["zip_bytes"],
-        "research_artifacts.zip",
-        "application/zip",
-        width="stretch",
-    )
-    with st.expander("Xem nội dung bản thảo và thông tin tái lập"):
-        sections = [
-            ("Abstract", paper["abstract"]),
-            ("Keywords", ", ".join(paper["keywords"])),
-            ("1. Introduction", paper["introduction"]),
-            ("2. Related Work", paper["related_work"]),
-            ("3. Proposed Methodology", paper["methodology"]),
-            ("4. Experimental Setup & Results", paper["experimental_results"]),
-            ("5. Discussion", paper["discussion"]),
-            ("6. Conclusion", paper["conclusion"]),
-        ]
-        for title, body in sections:
-            st.subheader(title)
-            st.write(body)
-        st.subheader("Mathematical Formulation")
-        for formula in paper.get("mathematical_formulas", []):
-            st.latex(formula)
-        st.subheader("Threats to Validity")
-        for threat in paper.get("threats_to_validity", []):
-            st.markdown(f"- {threat}")
-        st.subheader("References")
-        for index, reference in enumerate(paper["references"], 1):
-            st.markdown(f"{index}. {reference}")
-        st.subheader("Models and Datasets")
-        model_column, dataset_column = st.columns(2)
-        with model_column:
-            st.dataframe(pd.DataFrame(research["models_compared"])[["name", "backbone", "params_m", "latency_ms"]], use_container_width=True, hide_index=True)
-        with dataset_column:
-            st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], use_container_width=True, hide_index=True)
-        st.caption("Technical stack: " + (", ".join(research.get("tech_stack", [])) or "Not specified"))
     st.divider()
     st.subheader("💬 Hỏi về bài báo")
     question = st.text_input("Đặt câu hỏi về bài báo", placeholder="Ví dụ: Bài báo so sánh với baseline nào?", key="paper_question")
