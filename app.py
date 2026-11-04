@@ -52,7 +52,7 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 .stTabs [role="tab"]{background:#101a2d!important;color:#cbd5e1!important;white-space:nowrap!important}
 .stTabs [role="tab"][aria-selected="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid var(--cyan)!important}
 .stSelectbox label,.stTextInput label,.stTextArea label{color:var(--ink)!important}
-.stDownloadButton>button,.stButton>button{background:#101a2d!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:10px;font-weight:700;white-space:normal;line-height:1.2;min-height:3rem}
+.stDownloadButton>button,.stButton>button{background:#101a2d!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:10px;font-weight:700;white-space:normal;line-height:1.2;height:48px;min-height:48px;overflow:hidden}
 .stDownloadButton>button:hover,.stButton>button:hover{background:#17304d!important;border-color:var(--cyan)!important;color:#f8fbff!important}
 [data-testid="stSidebar"]{background:rgba(7,13,25,.96);border-right:1px solid var(--line)}
 .block-container{width:min(100% - 2rem,1540px);max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:clamp(1.2rem,3vw,2rem) clamp(1.1rem,3vw,2.3rem);margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .55rem;font-size:clamp(1.55rem,3.4vw,2.35rem);line-height:1.12;overflow-wrap:anywhere;word-break:normal}.hero p{color:#b9c8e2!important;margin:0;line-height:1.45}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003;overflow-wrap:anywhere}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem;overflow-wrap:anywhere}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;min-width:0}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px;overflow-x:auto;scrollbar-width:thin}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important;white-space:normal!important;text-align:center;min-height:2.5rem}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
@@ -305,6 +305,11 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         [item["model_name"], item["dataset_name"], item["role"], item["primary_metric"], item["latency_ms"], item.get("vram_mb", 0), item.get("flops_g", 0), item.get("evidence_type", "Planned")]
         for item in benchmark
     ], [31 * mm, 28 * mm, 16 * mm, 16 * mm, 17 * mm, 18 * mm, 15 * mm, 25 * mm])
+    ablation = research.get("ablation_study", [])
+    add_table("Ablation Study", [["Configuration", "Removed Component", "Primary", "Latency", "Delta"]] + [
+        [item["configuration"], item["removed_component"], item["primary_metric"], item["latency_ms"], item["delta_vs_full"]]
+        for item in ablation
+    ], [55 * mm, 53 * mm, 24 * mm, 25 * mm, 25 * mm])
     with tempfile.TemporaryDirectory(prefix="smart-research-charts-") as chart_dir:
         for chart_path in generate_research_charts(research, chart_dir):
             story.append(Image(BytesIO(chart_path.read_bytes()), width=170 * mm, height=70 * mm))
@@ -693,7 +698,7 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
             pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
             page_image = pixmap.tobytes("png")
             st.session_state["pdf_pages_images"].append(page_image)
-            st.image(page_image, width="stretch")
+            st.image(page_image, use_container_width=True)
             st.caption(f"Trang {page_number}")
         document.close()
     except (ImportError, RuntimeError, ValueError) as error:

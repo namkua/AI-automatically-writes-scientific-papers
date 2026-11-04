@@ -182,6 +182,17 @@ def _ensure_gap_and_proposal_sections(paper: WriterOutput, plan: PlannerOutput) 
     paper.methodology = methodology
     return paper
 
+
+def _validate_research_contract(plan: PlannerOutput, research: ResearcherOutput) -> None:
+    roles = {model.role for model in research.models_compared}
+    row_roles = {row.role for row in research.benchmark_table}
+    if not {"Baseline", "Proposed"}.issubset(roles) or not {"Baseline", "Proposed"}.issubset(row_roles):
+        raise ValueError("Benchmark contract requires both baseline and proposed models.")
+    if not research.ablation_study:
+        raise ValueError("Benchmark contract requires an ablation study.")
+    if not plan.proposed_method.strip():
+        raise ValueError("Planner contract requires a proposed method.")
+
 _STOP_WORDS = {
     "a", "an", "and", "for", "from", "in", "of", "on", "or", "the", "to", "with",
     "using", "via", "based", "towards", "and", "study", "analysis", "system",
@@ -1077,6 +1088,7 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
         plan = _build_dynamic_planner(topic, domain, objective)
     plan = _ensure_system_intelligence(plan, topic, domain, objective)
     research = _build_dynamic_research(plan)
+    _validate_research_contract(plan, research)
     live_paper = _maybe_live_writer(plan, research, api_key)
     paper = live_paper or _build_synthesis_writer(plan, research)
     paper = _ensure_gap_and_proposal_sections(paper, plan)
