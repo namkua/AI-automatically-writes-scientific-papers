@@ -73,8 +73,9 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 </style>
 <style>
 [data-testid="stMetric"]{min-width:0!important}
-[data-testid="stMetric"] label{white-space:normal!important;line-height:1.2!important}
+[data-testid="stMetric"] label{white-space:nowrap!important;line-height:1.2!important;overflow:hidden!important;text-overflow:ellipsis!important}
 [data-testid="stMetric"] [data-testid="stMetricValue"]{white-space:nowrap!important}
+[data-testid="stMetric"] [data-testid="stMetricDelta"]{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 .architecture-flow{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;background:#262730;border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.25rem;margin:.35rem 0 1.15rem;box-shadow:0 12px 28px #0003}
 .architecture-flow .flow-step{display:inline-flex;align-items:center;min-height:2.35rem;padding:.55rem .8rem;border:1px solid var(--line);border-radius:9px;background:#3A3B46;color:var(--ink)!important;font-weight:700;line-height:1.25}
 .architecture-flow .flow-arrow{color:var(--accent)!important;font-size:1.25rem;font-weight:800}
@@ -638,15 +639,15 @@ def render_header(result: dict[str, Any]) -> None:
 def render_plan(plan: dict[str, Any]) -> None:
     st.markdown(f"<div class='callout'><strong>Research Question</strong><br>{escape(plan['research_question'])}<br><br><strong>Core Hypothesis</strong><br>{escape(plan['hypothesis'])}</div>", unsafe_allow_html=True)
     architecture = st.columns(3)
-    architecture[0].markdown("**Knowledge Base**\n\n" + "\n".join(f"- {item}" for item in plan.get("knowledge_base", {}).get("taxonomy", [])))
-    architecture[1].markdown("**Inference Engine**\n\n" + plan.get("inference_engine", {}).get("matching_strategy", "Not specified") + "\n\nDomain: " + plan.get("inference_engine", {}).get("selected_domain", "Not specified"))
-    architecture[2].markdown("**Multi-Agent Coordination**\n\n" + "\n".join(f"- {item}" for item in plan.get("agent_coordination", {}).get("agents", [])))
-    st.subheader("📦 Datasets Catalog")
+    architecture[0].markdown("**Knowledge Base (Kho tri thức)**\n\n" + "\n".join(f"- {item}" for item in plan.get("knowledge_base", {}).get("taxonomy", [])))
+    architecture[1].markdown("**Inference Engine (Bộ suy luận)**\n\n" + plan.get("inference_engine", {}).get("matching_strategy", "Not specified") + "\n\nDomain (Lĩnh vực): " + plan.get("inference_engine", {}).get("selected_domain", "Not specified"))
+    architecture[2].markdown("**Multi-Agent Coordination (Phối hợp đa tác tử)**\n\n" + "\n".join(f"- {item}" for item in plan.get("agent_coordination", {}).get("agents", [])))
+    st.subheader("📦 Datasets Catalog (Danh mục tập dữ liệu)")
     columns = st.columns(3)
     for index, dataset in enumerate(plan["datasets_catalog"]):
         with columns[index % 3]:
-            st.markdown(f"<article class='glass-card'><h4>{escape(dataset['name'])}</h4><span class='badge'>{escape(dataset['modality'])}</span><p><b>Scale:</b> {escape(dataset['sample_size'])}<br><b>Input:</b> {escape(dataset['input_spec'])}<br><b>Metric:</b> {escape(dataset['primary_metric'])}</p><small>{escape(dataset['description'])}</small></article>", unsafe_allow_html=True)
-    st.subheader("🧠 Kho mô hình & kiến trúc")
+            st.markdown(f"<article class='glass-card'><h4>{escape(dataset['name'])}</h4><span class='badge'>{escape(dataset['modality'])}</span><p><b>Scale (Quy mô):</b> {escape(dataset['sample_size'])}<br><b>Input (Đầu vào):</b> {escape(dataset['input_spec'])}<br><b>Metric (Chỉ số):</b> {escape(dataset['primary_metric'])}</p><small>{escape(dataset['description'])}</small></article>", unsafe_allow_html=True)
+    st.subheader("🧠 Model & Architecture Catalog (Danh mục mô hình và kiến trúc)")
     models = pd.DataFrame([item for item in plan["models_catalog"] if item["role"] == "Proposed"])
     st.dataframe(display_frame(models, ["name","backbone","params_m","flops_g","latency_ms","key_characteristic"]), use_container_width=True, hide_index=True)
     if HAS_PLOTLY:
@@ -688,7 +689,7 @@ def render_benchmarks(research: dict[str, Any]) -> None:
                 template="plotly_dark",
                 title="Validation Loss (Loss xác thực)",
                 labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_loss": "Validation Loss (Sai số dự đoán; thấp hơn tốt hơn)"},
-                hovertemplate="Vòng huấn luyện: %{x}<br>Loss xác thực: %{y:.4f}<extra></extra>",
+                hover_data={"epoch": True, "proposed_loss": ":.4f"},
             ),
             use_container_width=True,
         )
@@ -701,7 +702,7 @@ def render_benchmarks(research: dict[str, Any]) -> None:
                 template="plotly_dark",
                 title=f"Primary Metric (Chỉ số chính: {primary_metric})",
                 labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_score": f"Primary Metric (Chỉ số chính: {primary_metric})"},
-                hovertemplate=f"Vòng huấn luyện: %{{x}}<br>{primary_metric}: %{{y:.4f}}<extra></extra>",
+                hover_data={"epoch": True, "proposed_score": ":.4f"},
             ),
             use_container_width=True,
         )
