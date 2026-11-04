@@ -64,32 +64,50 @@ WRITING AND EVIDENCE PRINCIPLES:
    bandwidth, KV-cache or document-context memory, multimodal token
    alignment, memory movement, kernel overhead, and empirical behavior.
    Never pad with repeated claims or generic praise.
-5. Write in formal academic English with these sections and subsections:
+5. Avoid AI-template prose. Do not repeat the abstract's claim in the
+   introduction, discussion, or conclusion, and do not use filler such as
+   "in this section", "it is worth noting", or "the results clearly
+   demonstrate". Every paragraph must add a distinct technical observation,
+   design trade-off, limitation, or reproducibility detail.
+6. Write in formal academic English with these sections and subsections:
    Abstract and Keywords; 1.1 Context and bottleneck; 1.2 limitations of
    current methods; 1.3 contributions; 2.1-2.3 Related Work and research gap;
    3.1 architecture and preprocessing; 3.2 streamlined formulations; 3.3
    retrieval/context or inference optimization; 4.1 setup and hardware; 4.2
    comparative evaluation; 4.3 ablations; 5 discussion and failure modes;
    6 conclusion and future directions; References.
-6. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
+7. In Section 3, define tensor/vector/matrix shapes and symbols, give explicit
+   Input -> preprocessing -> forward pass -> output pseudo-logic, and explain
+   gradient flow and hyperparameter sensitivity. Analyze time and space
+   complexity for the actual domain and accelerator constraints; do not claim
+   O(N log N) or O(N) unless the algorithm and assumptions justify it.
+8. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
    a gating/routing rule, a joint regularized loss, and optionally one
    complexity expression. Define symbols near first use. Replace algebra
    walls with data-flow descriptions, pseudocode, and implementation logic.
-7. Compare four relevant baseline families under a matched protocol. For
+9. In Section 4, explain why each observed or simulated number changes.
+   Interpret cache behavior, memory bandwidth, tensor shapes, kernel overhead,
+   sequence length, noise, and batch-size effects when relevant. For every
+   ablation, state the component removed, the quality/latency delta and
+   percentage change, and the mechanism that explains the change. Label these
+   as planned or simulated unless measured evidence is supplied.
+10. Compare four relevant baseline families under a matched protocol. For
    document/PDF/RAG topics, discuss text-only RAG, naive PDF parsing,
    chunking-only pipelines, and static multimodal encoders; report latency,
    VRAM, retrieval Precision/Recall@K, non-text table/image retrieval, and
    Accuracy@0.85, Accuracy@0.90, and Accuracy@0.95 when those metrics apply.
    For other domains, adapt the metrics instead of forcing PDF-RAG terminology
    or Q/K/V notation.
-8. Use the supplied benchmark rows and preserve every evidence_type label.
+11. Use the supplied benchmark rows and preserve every evidence_type label.
    Literature Baseline values are references, Controlled Simulation values are
    planning estimates, and Measured values require actual execution evidence.
    Never invent exact measurements, datasets, authors, DOIs, venues, or
    future papers. Do not convert a planned or simulated improvement into a
    measured result.
-9. Cite only real, verifiable seminal sources. RAG, document-layout,
-   multimodal, and PDF-processing citations must be checked before use.
+12. Cite only real, verifiable seminal sources. Use contextual IEEE-style
+   inline citations such as [1] and [2] only when the matching reference is
+   present. Explain what each cited baseline contributes and how it differs
+   from the proposed mechanism. Never fabricate citation numbers or sources.
 
 Return JSON matching WriterOutput exactly. Put detailed prose in section
 fields, not in an unstructured summary.
@@ -815,6 +833,14 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
     dataset_names = ", ".join(dataset.name for dataset in research.datasets_used)
     model_names = ", ".join(model.name for model in research.models_compared)
     ablation_summary = "; ".join(f"{row.configuration}: {row.primary_metric:.2f} ({row.delta_vs_full:+.2f})" for row in research.ablation_study)
+    ablation_explanation = " ".join(
+        f"{row.configuration} changes the planned primary metric by {row.delta_vs_full:+.2f} "
+        f"({abs(row.delta_vs_full) / max(proposed_score, 1e-9) * 100:.1f}%) because removing "
+        f"{row.removed_component.lower()} changes the information path or regularization budget. "
+        "This is a controlled planning estimate, not a measured effect."
+        for row in research.ablation_study
+        if row.removed_component != "None"
+    )
     formulas = [
         r"Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V",
         r"g_h=\sigma\left(W_g\,\operatorname{MeanPool}(X)+U_gq+b_g\right)",
@@ -855,7 +881,7 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
         experimental_results=(f"Across the generated benchmark matrix, {proposed.name} obtains a primary metric of {proposed_score:.2f}, whereas the strongest baseline reaches {baseline_score:.2f}. The absolute difference is {proposed_score - baseline_score:.2f}, equivalent to a {gain:.1f}% relative gain. The secondary metric changes from the baseline reference of {baseline_rows[0].secondary_metric if baseline_rows else 0.74:.2f} to {proposed_rows[0].secondary_metric if proposed_rows else 0.81:.2f}. These figures indicate a meaningful improvement under the controlled protocol, while the table should still be read as evidence for a research hypothesis rather than a substitute for repeated measurements.\n\n"
                        f"The result is also interpretable in terms of convergence dynamics. Over the 15-epoch simulated schedule, the proposed trajectory reduces optimization loss while increasing the primary score, with bounded perturbations that preserve a realistic rather than perfectly monotonic trace. A credible experimental narrative reports both central tendency and residual variance instead of presenting an artificially smooth curve as proof of generalization.\n\n"
                                f"The efficiency profile is equally important. {proposed.name} uses {proposed.params_m:.1f}M parameters and {proposed.flops_g:.1f} GFLOPs with an estimated latency of {proposed.latency_ms:.1f} ms. The baseline catalog spans {min(model.latency_ms for model in baselines):.1f}-{max(model.latency_ms for model in baselines):.1f} ms and {min(model.params_m for model in baselines):.1f}-{max(model.params_m for model in baselines):.1f}M parameters. Convergence traces show the proposed loss decreasing more rapidly, while its score rises from approximately 0.82 to 0.92 over ten epochs versus 0.85 for the baseline trajectory.\n\n"
-                               f"The ablation rows suggest that the gain is not explained solely by adding parameters: {ablation_summary}. The proposed configuration remains competitive on latency and improves both quality dimensions. A complete publication would extend this analysis with multiple random seeds, confidence intervals, calibration, subgroup performance, and a held-out external dataset. It should also record preprocessing time, peak memory, throughput at several batch sizes, and the operational threshold used to convert scores into decisions. Those measurements would determine whether the observed margin survives outside the controlled planning environment."),
+                               f"The ablation rows suggest that the gain is not explained solely by adding parameters: {ablation_summary}. Component-level interpretation is also required: {ablation_explanation} The proposed configuration remains competitive on latency and improves both quality dimensions. A complete publication would extend this analysis with multiple random seeds, confidence intervals, calibration, subgroup performance, and a held-out external dataset. It should also record preprocessing time, peak memory, throughput at several batch sizes, and the operational threshold used to convert scores into decisions. Those measurements would determine whether the observed margin survives outside the controlled planning environment."),
         discussion=(f"The results support the hypothesis that task-aware signal selection can improve {topic_title} without an extreme computational penalty. The most direct evidence is the joint movement of the primary score from {baseline_score:.2f} to {proposed_score:.2f} and the controlled latency of {proposed.latency_ms:.1f} ms. This is a more informative result than a score increase alone because the intended use case includes operational constraints. The improvement should be interpreted as a Pareto-style trade-off: a model is preferable only when its quality gain remains material after accounting for memory, throughput, and operational latency.\n\n"
                     "There are, however, important qualifications. The benchmark catalog contains complementary views of the task, but its generated estimates do not establish statistical significance. Dataset shift may change the ranking of models, particularly when the proposed inductive bias depends on relationships or modality-specific signals. Similarly, latency depends on batch size, compiler, hardware utilization, and implementation details. The reported efficiency numbers should therefore be treated as a measurement plan until verified with a profiler.\n\n"
                     "From a research design perspective, the strongest next step is a pre-registered multi-seed experiment with paired bootstrap intervals and a clear error taxonomy. Qualitative inspection should focus on cases where the proposed model disagrees with the strongest baseline. Such analysis can distinguish genuine representation improvements from favorable sampling and can guide targeted revisions to the architecture or data pipeline."),
@@ -886,6 +912,15 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
     proposed = next((model for model in research.models_compared if model.role == "Proposed"), research.models_compared[-1])
     datasets = ", ".join(dataset.name for dataset in research.datasets_used)
     metric = research.datasets_used[0].primary_metric
+    proposed_score = next((row.primary_metric for row in research.benchmark_table if row.role == "Proposed"), 0.0)
+    ablation_explanation = " ".join(
+        f"{row.configuration} changes the planned primary metric by {row.delta_vs_full:+.2f} "
+        f"({abs(row.delta_vs_full) / max(proposed_score, 1e-9) * 100:.1f}%) because removing "
+        f"{row.removed_component.lower()} changes the information path or regularization budget. "
+        "This is a controlled planning estimate, not a measured effect."
+        for row in research.ablation_study
+        if row.removed_component != "None"
+    )
     return WriterOutput(
         title=plan.title,
         abstract=(
@@ -908,9 +943,9 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             "4. We separate literature baselines, controlled simulations, and future measurements so that claims remain auditable."
         ),
         related_work=(
-            "### 2.1 Dense attention and standard backbones\nDense multi-head attention remains the reference because every head processes every eligible token. It is predictable and expressive, but its quadratic interaction pattern can become a memory-bandwidth bottleneck.\n\n"
-            "### 2.2 Grouped or shared-query computation\nGQA and related sharing strategies reduce key-value storage and improve serving efficiency, but they impose a fixed sharing pattern. They are strong comparators when the task benefits from regular memory access.\n\n"
-            "### 2.3 Kernel and systems optimization\nFlashAttention-style kernels reduce materialized intermediate memory and improve locality without changing the model's statistical objective. They are complementary to, rather than automatically interchangeable with, a learned routing mechanism.\n\n"
+            "### 2.1 Dense attention and standard backbones\nDense multi-head attention remains the reference because every head processes every eligible token. It is predictable and expressive, but its quadratic interaction pattern can become a memory-bandwidth bottleneck [1].\n\n"
+            "### 2.2 Grouped or shared-query computation\nGQA and related sharing strategies reduce key-value storage and improve serving efficiency [2], but they impose a fixed sharing pattern. They are strong comparators when the task benefits from regular memory access.\n\n"
+            "### 2.3 Kernel and systems optimization\nFlashAttention-style kernels reduce materialized intermediate memory through IO-aware tiling [3]. They are complementary to, rather than automatically interchangeable with, a learned routing mechanism.\n\n"
             "### 2.4 Pruning, routing, and quantization\nStatic pruning and quantization can reduce cost, but aggressive reduction may remove information needed for rare inputs. The proposed study combines adaptive selection with explicit consistency and calibration checks. Baseline comparisons must use the same task, sequence length, precision, and measurement protocol."
         ),
         methodology=(
@@ -941,7 +976,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             "The comparison table must report the primary metric direction, latency per token or example, peak VRAM in MB, FLOPs in G, and evidence type. "
             "The displayed values are planning estimates generated to make the experiment executable; they are not measured results.\n\n"
             "### 4.3 Ablation study\nThe study removes the sparsity term, dynamic router, and uncertainty term independently. A valid ablation keeps data, optimizer, budget, and evaluation code fixed. "
-            "The expected output is a matrix of mean, standard deviation, confidence interval, and evidence status rather than a single favorable run.\n\n"
+            f"The generated ablation interpretation is: {ablation_explanation} The expected output is a matrix of mean, standard deviation, confidence interval, and evidence status rather than a single favorable run.\n\n"
             "### 4.4 Statistical protocol\nRun at least three independent seeds, report paired differences and 95% confidence intervals, and preserve raw logs. "
             "A result is inconclusive when intervals overlap materially or when the effect disappears under a matched hardware budget."
         ),
