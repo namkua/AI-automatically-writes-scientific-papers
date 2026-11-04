@@ -30,8 +30,8 @@ except ImportError:
 st.set_page_config(page_title="Phòng thí nghiệm nghiên cứu AI", page_icon="AI", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""
 <style>
-:root{--ink:#e8eefc;--muted:#93a2bf;--panel:rgba(17,27,48,.8);--line:rgba(135,160,202,.24);--cyan:#50d9e9}
-[data-testid="stAppViewContainer"],[data-testid="stHeader"]{background:radial-gradient(circle at 82% 0%,#173b60 0,#0b1220 43%,#070b14 100%)}
+:root{--ink:#FAFAFA;--muted:#C7CBD4;--panel:#262730;--line:#454752;--accent:#FF4B4B;--accent-hover:#E03E3E;--code:#1E1E1E}
+[data-testid="stAppViewContainer"],[data-testid="stHeader"]{background:#0E1117}
 [data-testid="stAppViewContainer"] *,[data-testid="stSidebar"] *{color:var(--ink)}
 [data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,[data-testid="stSelectbox"] [data-baseweb="select"]>div,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border:1px solid var(--line)!important;box-shadow:none!important}
 [data-testid="stSidebar"] div[data-baseweb="select"],[data-testid="stSidebar"] div[data-baseweb="select"]>div{background-color:#101a2d!important;color:#e8eefc!important;border-color:var(--line)!important}
@@ -52,36 +52,39 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 .stTabs [role="tab"]{background:#101a2d!important;color:#cbd5e1!important;white-space:nowrap!important}
 .stTabs [role="tab"][aria-selected="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid var(--cyan)!important}
 .stSelectbox label,.stTextInput label,.stTextArea label{color:var(--ink)!important}
-.stDownloadButton>button,.stButton>button{background:#101a2d!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:10px;font-weight:700;white-space:normal;line-height:1.2;height:48px;min-height:48px;overflow:hidden}
-.stDownloadButton>button:hover,.stButton>button:hover{background:#17304d!important;border-color:var(--cyan)!important;color:#f8fbff!important}
+.stDownloadButton>button,.stButton>button{background:#262730!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:10px;font-weight:700;white-space:normal;line-height:1.2;height:48px;min-height:48px;overflow:hidden}
+.stDownloadButton>button:hover,.stButton>button:hover{background:var(--accent-hover)!important;border-color:var(--accent-hover)!important;color:#fff!important}
 [data-testid="stSidebar"]{background:rgba(7,13,25,.96);border-right:1px solid var(--line)}
-.block-container{width:min(100% - 2rem,1540px);max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:clamp(1.2rem,3vw,2rem) clamp(1.1rem,3vw,2.3rem);margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .55rem;font-size:clamp(1.55rem,3.4vw,2.35rem);line-height:1.12;overflow-wrap:anywhere;word-break:normal}.hero p{color:#b9c8e2!important;margin:0;line-height:1.45}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003;overflow-wrap:anywhere}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem;overflow-wrap:anywhere}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;min-width:0}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px;overflow-x:auto;scrollbar-width:thin}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important;white-space:normal!important;text-align:center;min-height:2.5rem}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
+.block-container{width:min(100% - 2rem,1540px);max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:clamp(1.2rem,3vw,2rem) clamp(1.1rem,3vw,2.3rem);margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .55rem;font-size:clamp(1.55rem,3.4vw,2.35rem);line-height:1.12;overflow-wrap:anywhere;word-break:normal}.hero p{color:#b9c8e2!important;margin:0;line-height:1.45}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003;overflow-wrap:anywhere}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem;overflow-wrap:anywhere}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;min-width:0}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px;overflow-x:auto;scrollbar-width:thin}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important;white-space:normal!important;text-align:center;min-height:2.5rem}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:var(--accent)!important;color:#fff!important;border:0;font-weight:800;height:48px;min-height:48px}
 .pdf-open-link{display:flex;align-items:center;justify-content:center;min-height:3rem;padding:.5rem 1rem;border-radius:.5rem;background:#d95757;color:#fff!important;font-weight:800;text-decoration:none!important;text-align:center}
-.pdf-open-link:hover{background:#ee6c6c;color:#fff!important}
+.pdf-open-link:hover{background:var(--accent-hover);color:#fff!important}
 .stDataFrame,.stTable{width:100%;max-width:100%;overflow-x:auto;border-radius:12px}
 [data-testid="stDataFrame"]{border:1px solid var(--line);border-radius:12px;overflow:hidden}
 [data-testid="stImage"],[data-testid="stImage"]>div,[data-testid="stImage"] img{width:100%!important;max-width:100%!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important}
 [data-testid="stImage"]{margin:0 0 1rem!important}
+[data-testid="stDataFrame"]>div{overflow-x:auto!important}
+[data-testid="stMarkdownContainer"] .katex-display,[data-testid="stMarkdownContainer"] .katex{background:var(--code)!important;color:var(--ink)!important;padding:.45rem .65rem;border-radius:8px;overflow-x:auto}
 [data-testid="stExpander"]{border:1px solid var(--line);border-radius:12px;background:rgba(17,27,48,.48)}
 .artifact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
 .artifact-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem;min-width:0;overflow-wrap:anywhere}
 .artifact-card strong{color:#f8fbff!important}.artifact-card small{color:var(--muted)!important}
 @media (max-width: 760px){.block-container{width:calc(100% - 1rem);padding-left:.5rem;padding-right:.5rem}.stTabs [data-baseweb="tab"]{font-size:.78rem;padding:.45rem .55rem}.glass-card{min-height:0}.architecture-flow{padding:.8rem}.dataset-command{font-size:.8rem}}
+.hero{background:#262730!important;border-color:#454752!important}.domain-badge{background:#FF4B4B!important;color:#fff!important}.glass-card{background:#262730!important;border-color:#454752!important}.callout{background:#262730!important;border-color:#454752!important;border-left-color:#FF4B4B!important}
 </style>
 <style>
 [data-testid="stMetric"]{min-width:0!important}
 [data-testid="stMetric"] label{white-space:normal!important;line-height:1.2!important}
 [data-testid="stMetric"] [data-testid="stMetricValue"]{white-space:nowrap!important}
-.architecture-flow{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;background:linear-gradient(135deg,#101a2d,#172b48);border:1px solid rgba(80,217,233,.35);border-radius:14px;padding:1.1rem 1.25rem;margin:.35rem 0 1.15rem;box-shadow:0 12px 28px #0003}
-.architecture-flow .flow-step{display:inline-flex;align-items:center;min-height:2.35rem;padding:.55rem .8rem;border:1px solid rgba(135,160,202,.35);border-radius:9px;background:#1b3150;color:#f4f8ff!important;font-weight:700;line-height:1.25}
-.architecture-flow .flow-arrow{color:#50d9e9!important;font-size:1.25rem;font-weight:800}
-.dataset-command{background:#101a2d;border:1px solid rgba(135,160,202,.35);border-radius:12px;padding:1.05rem 1.25rem;margin-top:.55rem;overflow-x:auto}
-.dataset-command code{background:transparent!important;color:#f4f8ff!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;white-space:pre}
-.dataset-command .muted-command{color:#cbd5e1!important}
-.dataset-command .path-command{color:#50d9e9!important}
+.architecture-flow{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;background:#262730;border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.25rem;margin:.35rem 0 1.15rem;box-shadow:0 12px 28px #0003}
+.architecture-flow .flow-step{display:inline-flex;align-items:center;min-height:2.35rem;padding:.55rem .8rem;border:1px solid var(--line);border-radius:9px;background:#3A3B46;color:var(--ink)!important;font-weight:700;line-height:1.25}
+.architecture-flow .flow-arrow{color:var(--accent)!important;font-size:1.25rem;font-weight:800}
+.dataset-command{background:var(--code);border:1px solid var(--line);border-radius:12px;padding:1.05rem 1.25rem;margin-top:.55rem;overflow-x:auto}
+.dataset-command code{background:transparent!important;color:var(--ink)!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;white-space:pre}
+.dataset-command .muted-command{color:var(--muted)!important}
+.dataset-command .path-command{color:#FF8A8A!important}
 .dataset-command .flag-command{color:#f59e0b!important}
-.architecture-code{background:#101a2d;border:1px solid rgba(135,160,202,.35);border-radius:12px;padding:1.2rem 1.35rem;margin-top:.55rem;overflow-x:auto}
-.architecture-code pre{margin:0;background:transparent!important;color:#e8eefc!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;line-height:1.55;white-space:pre}
+.architecture-code{background:var(--code);border:1px solid var(--line);border-radius:12px;padding:1.2rem 1.35rem;margin-top:.55rem;overflow-x:auto}
+.architecture-code pre{margin:0;background:transparent!important;color:var(--ink)!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;line-height:1.55;white-space:pre}
 .pdf-preview{background:#f4f6fa;border:1px solid rgba(135,160,202,.3);border-radius:16px;padding:.6rem;overflow:hidden}
 [data-testid="stSidebar"]{min-width:18rem;max-width:22rem}
 @media (max-width: 760px){.block-container{width:calc(100% - 1rem);padding-left:.5rem;padding-right:.5rem}.hero h1{font-size:1.5rem}.stTabs [data-baseweb="tab"]{font-size:.78rem;padding:.35rem}.architecture-flow{gap:.35rem}.architecture-flow .flow-step{font-size:.82rem}}
@@ -572,10 +575,10 @@ def render_plan(plan: dict[str, Any]) -> None:
             st.markdown(f"<article class='glass-card'><h4>{escape(dataset['name'])}</h4><span class='badge'>{escape(dataset['modality'])}</span><p><b>Scale:</b> {escape(dataset['sample_size'])}<br><b>Input:</b> {escape(dataset['input_spec'])}<br><b>Metric:</b> {escape(dataset['primary_metric'])}</p><small>{escape(dataset['description'])}</small></article>", unsafe_allow_html=True)
     st.subheader("🧠 Kho mô hình & kiến trúc")
     models = pd.DataFrame([item for item in plan["models_catalog"] if item["role"] == "Proposed"])
-    st.dataframe(models[["name","backbone","params_m","flops_g","latency_ms","key_characteristic"]], width="stretch", hide_index=True)
+    st.dataframe(models[["name","backbone","params_m","flops_g","latency_ms","key_characteristic"]], use_container_width=True, hide_index=True)
     if HAS_PLOTLY:
         chart = models.melt(id_vars="name", value_vars=["params_m","latency_ms"], var_name="Measure", value_name="Value")
-        st.plotly_chart(px.bar(chart, x="name", y="Value", color="Measure", barmode="group", template="plotly_dark", title="Parameters vs latency"), width="stretch")
+        st.plotly_chart(px.bar(chart, x="name", y="Value", color="Measure", barmode="group", template="plotly_dark", title="Parameters vs latency"), use_container_width=True)
 
 
 def render_benchmarks(research: dict[str, Any]) -> None:
@@ -586,23 +589,23 @@ def render_benchmarks(research: dict[str, Any]) -> None:
     if HAS_PLOTLY:
         loss = curves[["epoch", "proposed_loss"]].rename(columns={"proposed_loss": "Loss"})
         score = curves[["epoch", "proposed_score"]].rename(columns={"proposed_score": "Primary Metric"})
-        left.plotly_chart(px.line(loss, x="epoch", y="Loss", markers=True, template="plotly_dark", title="Training / validation loss"), width="stretch")
-        right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", markers=True, template="plotly_dark", title="Performance growth"), width="stretch")
+        left.plotly_chart(px.line(loss, x="epoch", y="Loss", markers=True, template="plotly_dark", title="Training / validation loss"), use_container_width=True)
+        right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", markers=True, template="plotly_dark", title="Performance growth"), use_container_width=True)
     st.subheader("So sánh với bài gốc và các baseline")
     benchmark = pd.DataFrame(research["benchmark_table"])
     st.caption("Bảng này giữ cả baseline và phương pháp đề xuất để đối chiếu trực tiếp; các giá trị mô phỏng vẫn có nhãn bằng chứng.")
-    st.dataframe(benchmark, width="stretch", hide_index=True)
+    st.dataframe(benchmark, use_container_width=True, hide_index=True)
     if HAS_PLOTLY:
         left, middle, right = st.columns(3)
-        left.plotly_chart(px.bar(benchmark, x="model_name", y="primary_metric", title="Primary metric", template="plotly_dark"), width="stretch")
-        middle.plotly_chart(px.bar(benchmark, x="model_name", y="latency_ms", title="Latency (ms)", template="plotly_dark"), width="stretch")
-        right.plotly_chart(px.bar(benchmark, x="model_name", y="params_m", title="Parameters (M)" , template="plotly_dark"), width="stretch")
+        left.plotly_chart(px.bar(benchmark, x="model_name", y="primary_metric", title="Primary metric", template="plotly_dark"), use_container_width=True)
+        middle.plotly_chart(px.bar(benchmark, x="model_name", y="latency_ms", title="Latency (ms)", template="plotly_dark"), use_container_width=True)
+        right.plotly_chart(px.bar(benchmark, x="model_name", y="params_m", title="Parameters (M)" , template="plotly_dark"), use_container_width=True)
     if research.get("ablation_study"):
         st.subheader("Thử nghiệm loại bỏ từng thành phần")
         ablation = pd.DataFrame(research["ablation_study"])
-        st.dataframe(ablation, width="stretch", hide_index=True)
+        st.dataframe(ablation, use_container_width=True, hide_index=True)
         if HAS_PLOTLY:
-            st.plotly_chart(px.bar(ablation, x="configuration", y="primary_metric", color="removed_component", title="Effect of removing each component", template="plotly_dark"), width="stretch")
+            st.plotly_chart(px.bar(ablation, x="configuration", y="primary_metric", color="removed_component", title="Effect of removing each component", template="plotly_dark"), use_container_width=True)
     st.subheader("Phát hiện chính")
     for finding in research["key_findings"]:
         st.markdown(f"- {finding}")
@@ -623,7 +626,7 @@ def render_verified_datasets() -> None:
     for name, path, task, source in entries:
         ready = path.is_file() and path.stat().st_size > 0
         rows.append({"Dataset": name, "Task": task, "Status": "Ready" if ready else "Not downloaded", "Size (MB)": round(path.stat().st_size / 1_000_000, 2) if ready else 0.0, "Source": source})
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     available = [row["Dataset"] for row in rows if row["Status"] == "Ready"]
     if not available:
         st.info("No verified local dataset is available yet. Run the preparation command shown below.")
@@ -632,7 +635,7 @@ def render_verified_datasets() -> None:
     selected_path = next(path for name, path, _, _ in entries if name == selected)
     if selected_path.suffix == ".jsonl":
         sample = pd.read_json(selected_path, lines=True).head(20)
-        st.dataframe(sample, width="stretch", hide_index=True)
+        st.dataframe(sample, use_container_width=True, hide_index=True)
     else:
         st.info(f"Binary/text corpus available at `{selected_path.relative_to(data_root.parent)}` ({selected_path.stat().st_size:,} bytes).")
     st.markdown(
@@ -747,9 +750,9 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         st.subheader("Models and Datasets")
         model_column, dataset_column = st.columns(2)
         with model_column:
-            st.dataframe(pd.DataFrame(research["models_compared"])[["name", "backbone", "params_m", "latency_ms"]], width="stretch", hide_index=True)
+            st.dataframe(pd.DataFrame(research["models_compared"])[["name", "backbone", "params_m", "latency_ms"]], use_container_width=True, hide_index=True)
         with dataset_column:
-            st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], width="stretch", hide_index=True)
+            st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], use_container_width=True, hide_index=True)
         st.caption("Technical stack: " + (", ".join(research.get("tech_stack", [])) or "Not specified"))
     st.divider()
     st.subheader("💬 Hỏi về bài báo")
