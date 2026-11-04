@@ -625,15 +625,16 @@ def render_header(result: dict[str, Any]) -> None:
     proposed = next(item for item in research["models_compared"] if item["role"] == "Proposed")
     proposed_row = next(item for item in research["benchmark_table"] if item["role"] == "Proposed")
     primary_metric = metric_explanation(research)
+    metric_name = primary_metric.split(" — ", 1)[0]
     st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Phòng thí nghiệm nghiên cứu AI · Hệ thống đa tác tử</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
     metric_rows = [st.columns(3), st.columns(3)]
     cards = metric_rows[0] + metric_rows[1]
-    cards[0].metric("Primary Score (Điểm chất lượng chính)", f"{proposed_row['primary_metric']:.2f}", f"{primary_metric}; mô phỏng có kiểm soát")
-    cards[1].metric("Latency (Thời gian phản hồi)", f"{proposed['latency_ms']:.1f} ms", f"Thời gian xử lý; {proposed['params_m']:.1f}M tham số")
+    cards[0].metric(f"Primary Score ({metric_name})", f"{proposed_row['primary_metric']:.2f}", "Cao hơn tốt hơn · mô phỏng")
+    cards[1].metric("Latency (Thời gian phản hồi, ms)", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M tham số")
     cards[2].metric("Experiment Scope (Quy mô thử nghiệm)", f"{len(research['datasets_used'])} datasets", "Số tập dữ liệu được đánh giá")
-    cards[3].metric("Review Score (Điểm phản biện)", f"{review['overall_score']:.1f} / 10", f"Đánh giá cấu trúc và độ chặt chẽ: {review['verdict']}")
-    cards[4].metric("Reasoning Consistency (Độ nhất quán suy luận)", f"{research.get('reasoning_consistency_score', 0):.2f}", "Kiểm tra logic định tuyến")
-    cards[5].metric("Knowledge Precision (Độ chính xác tri thức)", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "Mức khớp với danh mục tri thức")
+    cards[3].metric("Review Score (Điểm phản biện)", f"{review['overall_score']:.1f} / 10", f"Đánh giá cấu trúc: {review['verdict']}")
+    cards[4].metric("Reasoning Consistency (Độ nhất quán)", f"{research.get('reasoning_consistency_score', 0):.2f}", "Kiểm tra logic định tuyến")
+    cards[5].metric("Knowledge Precision (Độ chính xác tri thức)", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "Mức khớp danh mục tri thức")
 
 
 def render_plan(plan: dict[str, Any]) -> None:
