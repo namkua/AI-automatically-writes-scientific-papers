@@ -143,6 +143,20 @@ def display_frame(frame: pd.DataFrame, columns: list[str] | None = None) -> pd.D
     return selected.rename(columns={key: label for key, label in DISPLAY_LABELS.items()})
 
 
+def metric_explanation(research: dict[str, Any]) -> str:
+    metric = str((research.get("datasets_used") or [{}])[0].get("primary_metric", "task score"))
+    normalized = metric.lower()
+    if "loss" in normalized:
+        meaning = "mất mát dự đoán; thấp hơn tốt hơn"
+    elif any(term in normalized for term in ("accuracy", "f1", "bleu", "cider", "recall", "precision", "auc", "return", "success")):
+        meaning = "điểm chất lượng nhiệm vụ; cao hơn tốt hơn"
+    elif "wer" in normalized or "error" in normalized:
+        meaning = "tỷ lệ lỗi; thấp hơn tốt hơn"
+    else:
+        meaning = "chỉ số chất lượng chính của nhiệm vụ"
+    return f"{metric} — {meaning}"
+
+
 def apply_preset() -> None:
     choice = st.session_state.get("preset", CUSTOM)
     if choice in PRESETS:
@@ -609,15 +623,16 @@ def render_header(result: dict[str, Any]) -> None:
     plan, research, review = result["plan"], result["research"], result["review"]
     proposed = next(item for item in research["models_compared"] if item["role"] == "Proposed")
     proposed_row = next(item for item in research["benchmark_table"] if item["role"] == "Proposed")
+    primary_metric = metric_explanation(research)
     st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Phòng thí nghiệm nghiên cứu AI · Hệ thống đa tác tử</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
     metric_rows = [st.columns(3), st.columns(3)]
     cards = metric_rows[0] + metric_rows[1]
-    cards[0].metric("Planned Primary Score", f"{proposed_row['primary_metric']:.2f}", "controlled estimate")
-    cards[1].metric("Latency", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M params")
-    cards[2].metric("Experiment Scope", f"{len(research['datasets_used'])} datasets", "1 proposed method")
-    cards[3].metric("Review Score", f"{review['overall_score']:.1f} / 10", review["verdict"])
-    cards[4].metric("Reasoning Consistency", f"{research.get('reasoning_consistency_score', 0):.2f}", "routing audit")
-    cards[5].metric("Knowledge Precision", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "catalog alignment")
+    cards[0].metric("Primary Score (Điểm chất lượng chính)", f"{proposed_row['primary_metric']:.2f}", f"{primary_metric}; mô phỏng có kiểm soát")
+    cards[1].metric("Latency (Thời gian phản hồi)", f"{proposed['latency_ms']:.1f} ms", f"Thời gian xử lý; {proposed['params_m']:.1f}M tham số")
+    cards[2].metric("Experiment Scope (Quy mô thử nghiệm)", f"{len(research['datasets_used'])} datasets", "Số tập dữ liệu được đánh giá")
+    cards[3].metric("Review Score (Điểm phản biện)", f"{review['overall_score']:.1f} / 10", f"Đánh giá cấu trúc và độ chặt chẽ: {review['verdict']}")
+    cards[4].metric("Reasoning Consistency (Độ nhất quán suy luận)", f"{research.get('reasoning_consistency_score', 0):.2f}", "Kiểm tra logic định tuyến")
+    cards[5].metric("Knowledge Precision (Độ chính xác tri thức)", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "Mức khớp với danh mục tri thức")
 
 
 def render_plan(plan: dict[str, Any]) -> None:
@@ -657,6 +672,7 @@ def render_plan(plan: dict[str, Any]) -> None:
 
 def render_benchmarks(research: dict[str, Any]) -> None:
     selected = st.selectbox("Chọn tập dữ liệu", [item["name"] for item in research["datasets_used"]])
+    primary_metric = metric_explanation(research)
     curves = pd.DataFrame(research["training_curves"])
     curves = curves[curves["dataset_name"] == selected]
     left, right = st.columns(2)
@@ -671,7 +687,8 @@ def render_benchmarks(research: dict[str, Any]) -> None:
                 markers=True,
                 template="plotly_dark",
                 title="Validation Loss (Loss xác thực)",
-                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_loss": "Validation Loss (Loss xác thực)"},
+                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_loss": "Validation Loss (Sai số dự đoán; thấp hơn tốt hơn)"},
+                hovertemplate="Vòng huấn luyện: %{x}<br>Loss xác thực: %{y:.4f}<extra></extra>",
             ),
             use_container_width=True,
         )
@@ -682,8 +699,9 @@ def render_benchmarks(research: dict[str, Any]) -> None:
                 y="proposed_score",
                 markers=True,
                 template="plotly_dark",
-                title="Performance Growth (Mức tăng hiệu năng)",
-                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_score": "Primary Metric (Chỉ số chính)"},
+                title=f"Primary Metric (Chỉ số chính: {primary_metric})",
+                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_score": f"Primary Metric (Chỉ số chính: {primary_metric})"},
+                hovertemplate=f"Vòng huấn luyện: %{{x}}<br>{primary_metric}: %{{y:.4f}}<extra></extra>",
             ),
             use_container_width=True,
         )
@@ -698,9 +716,9 @@ def render_benchmarks(research: dict[str, Any]) -> None:
             "Proposed": "Proposed Method (Phương pháp đề xuất)",
         }).fillna(benchmark_chart["role"])
         left, middle, right = st.columns(3)
-        left.plotly_chart(px.bar(benchmark_chart, x="model_name", y="primary_metric", color="role", title="Primary Metric (Chỉ số chính)", labels={"model_name": "Model (Mô hình)", "primary_metric": "Primary Metric (Chỉ số chính)", "role": "Role (Vai trò)"}, template="plotly_dark"), use_container_width=True)
-        middle.plotly_chart(px.bar(benchmark_chart, x="model_name", y="latency_ms", color="role", title="Latency (Độ trễ, ms)", labels={"model_name": "Model (Mô hình)", "latency_ms": "Latency (Độ trễ, ms)", "role": "Role (Vai trò)"}, template="plotly_dark"), use_container_width=True)
-        right.plotly_chart(px.bar(benchmark_chart, x="model_name", y="params_m", color="role", title="Parameters (Tham số, M)", labels={"model_name": "Model (Mô hình)", "params_m": "Parameters (Tham số, M)", "role": "Role (Vai trò)"}, template="plotly_dark"), use_container_width=True)
+        left.plotly_chart(px.bar(benchmark_chart, x="model_name", y="primary_metric", color="role", title=f"Primary Metric (Chỉ số chính: {primary_metric})", labels={"model_name": "Model (Mô hình)", "primary_metric": f"Primary Metric ({primary_metric})", "role": "Role (Vai trò)"}, hover_data={"model_name": True, "role": True, "primary_metric": ":.4f"}, template="plotly_dark"), use_container_width=True)
+        middle.plotly_chart(px.bar(benchmark_chart, x="model_name", y="latency_ms", color="role", title="Latency (Thời gian xử lý, ms)", labels={"model_name": "Model (Mô hình)", "latency_ms": "Latency (Thời gian xử lý, ms)", "role": "Role (Vai trò)"}, hover_data={"model_name": True, "role": True, "latency_ms": ":.2f"}, template="plotly_dark"), use_container_width=True)
+        right.plotly_chart(px.bar(benchmark_chart, x="model_name", y="params_m", color="role", title="Parameters (Số tham số, triệu)", labels={"model_name": "Model (Mô hình)", "params_m": "Parameters (Số tham số, triệu)", "role": "Role (Vai trò)"}, hover_data={"model_name": True, "role": True, "params_m": ":.2f"}, template="plotly_dark"), use_container_width=True)
     if research.get("ablation_study"):
         st.subheader("Thử nghiệm loại bỏ từng thành phần")
         ablation = pd.DataFrame(research["ablation_study"])
@@ -716,7 +734,7 @@ def render_benchmarks(research: dict[str, Any]) -> None:
                 "Robustness regularization": "Robustness Regularization (Điều chuẩn độ bền)",
                 "Uncertainty calibration": "Uncertainty Calibration (Hiệu chỉnh độ tin cậy)",
             }).fillna(ablation_chart["removed_component"])
-            st.plotly_chart(px.bar(ablation_chart, x="configuration", y="primary_metric", color="removed_component", title="Effect of removing each component (Tác động khi bỏ từng thành phần)", labels={"configuration": "Configuration (Cấu hình)", "primary_metric": "Primary Metric (Chỉ số chính)", "removed_component": "Removed Component (Thành phần bỏ)"}, template="plotly_dark"), use_container_width=True)
+            st.plotly_chart(px.bar(ablation_chart, x="configuration", y="primary_metric", color="removed_component", title=f"Effect of removing each component (Tác động khi bỏ từng thành phần: {primary_metric})", labels={"configuration": "Configuration (Cấu hình)", "primary_metric": f"Primary Metric ({primary_metric})", "removed_component": "Removed Component (Thành phần bỏ)"}, hover_data={"configuration": True, "removed_component": True, "primary_metric": ":.4f"}, template="plotly_dark"), use_container_width=True)
     st.subheader("Phát hiện chính")
     for finding in research["key_findings"]:
         st.markdown(f"- {finding}")
