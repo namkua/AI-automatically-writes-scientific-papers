@@ -116,6 +116,32 @@ PRESETS = {
 }
 CUSTOM = "Custom Topic (Enter any research topic...)"
 
+DISPLAY_LABELS = {
+    "model_name": "Model (Mô hình)",
+    "name": "Model (Mô hình)",
+    "role": "Role (Vai trò)",
+    "backbone": "Backbone (Kiến trúc nền)",
+    "primary_metric": "Primary Metric (Chỉ số chính)",
+    "latency_ms": "Latency (Độ trễ, ms)",
+    "vram_mb": "Peak VRAM (Bộ nhớ, MB)",
+    "flops_g": "FLOPs (G)",
+    "params_m": "Parameters (Tham số, M)",
+    "dataset_name": "Dataset (Tập dữ liệu)",
+    "evidence_type": "Evidence (Bằng chứng)",
+    "configuration": "Configuration (Cấu hình)",
+    "removed_component": "Removed Component (Thành phần bỏ)",
+    "delta_vs_full": "Delta vs Full (Chênh lệch)",
+    "epoch": "Epoch (Vòng huấn luyện)",
+    "proposed_loss": "Validation Loss (Loss xác thực)",
+    "proposed_score": "Primary Metric (Chỉ số chính)",
+}
+
+
+def display_frame(frame: pd.DataFrame, columns: list[str] | None = None) -> pd.DataFrame:
+    """Return a display-only copy; pipeline keys and exported artifacts stay unchanged."""
+    selected = frame if columns is None else frame[[column for column in columns if column in frame]]
+    return selected.rename(columns={key: label for key, label in DISPLAY_LABELS.items()})
+
 
 def apply_preset() -> None:
     choice = st.session_state.get("preset", CUSTOM)
@@ -607,10 +633,26 @@ def render_plan(plan: dict[str, Any]) -> None:
             st.markdown(f"<article class='glass-card'><h4>{escape(dataset['name'])}</h4><span class='badge'>{escape(dataset['modality'])}</span><p><b>Scale:</b> {escape(dataset['sample_size'])}<br><b>Input:</b> {escape(dataset['input_spec'])}<br><b>Metric:</b> {escape(dataset['primary_metric'])}</p><small>{escape(dataset['description'])}</small></article>", unsafe_allow_html=True)
     st.subheader("🧠 Kho mô hình & kiến trúc")
     models = pd.DataFrame([item for item in plan["models_catalog"] if item["role"] == "Proposed"])
-    st.dataframe(models[["name","backbone","params_m","flops_g","latency_ms","key_characteristic"]], use_container_width=True, hide_index=True)
+    st.dataframe(display_frame(models, ["name","backbone","params_m","flops_g","latency_ms","key_characteristic"]), use_container_width=True, hide_index=True)
     if HAS_PLOTLY:
         chart = models.melt(id_vars="name", value_vars=["params_m","latency_ms"], var_name="Measure", value_name="Value")
-        st.plotly_chart(px.bar(chart, x="name", y="Value", color="Measure", barmode="group", template="plotly_dark", title="Parameters vs latency"), use_container_width=True)
+        chart["Measure"] = chart["Measure"].map({
+            "params_m": "Parameters (Tham số, M)",
+            "latency_ms": "Latency (Độ trễ, ms)",
+        }).fillna(chart["Measure"])
+        st.plotly_chart(
+            px.bar(
+                chart,
+                x="name",
+                y="Value",
+                color="Measure",
+                barmode="group",
+                template="plotly_dark",
+                title="Parameters vs latency (Tham số và độ trễ)",
+                labels={"name": "Model (Mô hình)", "Value": "Value (Giá trị)", "Measure": "Measure (Chỉ số)"},
+            ),
+            use_container_width=True,
+        )
 
 
 def render_benchmarks(research: dict[str, Any]) -> None:
@@ -619,25 +661,62 @@ def render_benchmarks(research: dict[str, Any]) -> None:
     curves = curves[curves["dataset_name"] == selected]
     left, right = st.columns(2)
     if HAS_PLOTLY:
-        loss = curves[["epoch", "proposed_loss"]].rename(columns={"proposed_loss": "Loss"})
-        score = curves[["epoch", "proposed_score"]].rename(columns={"proposed_score": "Primary Metric"})
-        left.plotly_chart(px.line(loss, x="epoch", y="Loss", markers=True, template="plotly_dark", title="Training / validation loss"), use_container_width=True)
-        right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", markers=True, template="plotly_dark", title="Performance growth"), use_container_width=True)
+        loss = curves[["epoch", "proposed_loss"]]
+        score = curves[["epoch", "proposed_score"]]
+        left.plotly_chart(
+            px.line(
+                loss,
+                x="epoch",
+                y="proposed_loss",
+                markers=True,
+                template="plotly_dark",
+                title="Validation Loss (Loss xác thực)",
+                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_loss": "Validation Loss (Loss xác thực)"},
+            ),
+            use_container_width=True,
+        )
+        right.plotly_chart(
+            px.line(
+                score,
+                x="epoch",
+                y="proposed_score",
+                markers=True,
+                template="plotly_dark",
+                title="Performance Growth (Mức tăng hiệu năng)",
+                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_score": "Primary Metric (Chỉ số chính)"},
+            ),
+            use_container_width=True,
+        )
     st.subheader("So sánh với bài gốc và các baseline")
     benchmark = pd.DataFrame(research["benchmark_table"])
     st.caption("Bảng này giữ cả baseline và phương pháp đề xuất để đối chiếu trực tiếp; các giá trị mô phỏng vẫn có nhãn bằng chứng.")
-    st.dataframe(benchmark, use_container_width=True, hide_index=True)
+    st.dataframe(display_frame(benchmark), use_container_width=True, hide_index=True)
     if HAS_PLOTLY:
+        benchmark_chart = benchmark.copy()
+        benchmark_chart["role"] = benchmark_chart["role"].map({
+            "Baseline": "Baseline (Mô hình đối chứng)",
+            "Proposed": "Proposed Method (Phương pháp đề xuất)",
+        }).fillna(benchmark_chart["role"])
         left, middle, right = st.columns(3)
-        left.plotly_chart(px.bar(benchmark, x="model_name", y="primary_metric", title="Primary metric", template="plotly_dark"), use_container_width=True)
-        middle.plotly_chart(px.bar(benchmark, x="model_name", y="latency_ms", title="Latency (ms)", template="plotly_dark"), use_container_width=True)
-        right.plotly_chart(px.bar(benchmark, x="model_name", y="params_m", title="Parameters (M)" , template="plotly_dark"), use_container_width=True)
+        left.plotly_chart(px.bar(benchmark_chart, x="model_name", y="primary_metric", color="role", title="Primary Metric (Chỉ số chính)", labels={"model_name": "Model (Mô hình)", "primary_metric": "Primary Metric (Chỉ số chính)", "role": "Role (Vai trò)"}, template="plotly_dark"), use_container_width=True)
+        middle.plotly_chart(px.bar(benchmark_chart, x="model_name", y="latency_ms", color="role", title="Latency (Độ trễ, ms)", labels={"model_name": "Model (Mô hình)", "latency_ms": "Latency (Độ trễ, ms)", "role": "Role (Vai trò)"}, template="plotly_dark"), use_container_width=True)
+        right.plotly_chart(px.bar(benchmark_chart, x="model_name", y="params_m", color="role", title="Parameters (Tham số, M)", labels={"model_name": "Model (Mô hình)", "params_m": "Parameters (Tham số, M)", "role": "Role (Vai trò)"}, template="plotly_dark"), use_container_width=True)
     if research.get("ablation_study"):
         st.subheader("Thử nghiệm loại bỏ từng thành phần")
         ablation = pd.DataFrame(research["ablation_study"])
-        st.dataframe(ablation, use_container_width=True, hide_index=True)
+        st.dataframe(display_frame(ablation), use_container_width=True, hide_index=True)
         if HAS_PLOTLY:
-            st.plotly_chart(px.bar(ablation, x="configuration", y="primary_metric", color="removed_component", title="Effect of removing each component", template="plotly_dark"), use_container_width=True)
+            ablation_chart = ablation.copy()
+            ablation_chart["configuration"] = ablation_chart["configuration"].map({
+                "Full proposed model": "Full proposed model (Mô hình đầy đủ)",
+            }).fillna(ablation_chart["configuration"])
+            ablation_chart["removed_component"] = ablation_chart["removed_component"].map({
+                "None": "None (Không bỏ thành phần)",
+                "Adaptive gating": "Adaptive Gating (Cổng thích ứng)",
+                "Robustness regularization": "Robustness Regularization (Điều chuẩn độ bền)",
+                "Uncertainty calibration": "Uncertainty Calibration (Hiệu chỉnh độ tin cậy)",
+            }).fillna(ablation_chart["removed_component"])
+            st.plotly_chart(px.bar(ablation_chart, x="configuration", y="primary_metric", color="removed_component", title="Effect of removing each component (Tác động khi bỏ từng thành phần)", labels={"configuration": "Configuration (Cấu hình)", "primary_metric": "Primary Metric (Chỉ số chính)", "removed_component": "Removed Component (Thành phần bỏ)"}, template="plotly_dark"), use_container_width=True)
     st.subheader("Phát hiện chính")
     for finding in research["key_findings"]:
         st.markdown(f"- {finding}")
