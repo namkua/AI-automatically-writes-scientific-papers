@@ -204,6 +204,12 @@ def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     datasets = pd.DataFrame(research.get("datasets_used", []))[['name', 'modality', 'sample_size', 'primary_metric', 'source_url']].to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
     ablations = pd.DataFrame(research.get("ablation_study", [])).to_markdown(index=False) if research.get("ablation_study") else "No ablation rows available."
     stack = ", ".join(research.get("tech_stack", [])) or "Not specified"
+    formulas = "\n".join(f"{index}. {formula}" for index, formula in enumerate(paper.get("mathematical_formulas", []), 1)) or "No mathematical formulation available."
+    threats = "\n".join(f"- {item}" for item in paper.get("threats_to_validity", [])) or "No threats-to-validity analysis available."
+    metadata = research.get("project_metadata") or {}
+    metadata_text = "\n".join(f"- {key.replace('_', ' ').title()}: {value}" for key, value in metadata.items()) or "Not specified"
+    knowledge = research.get("knowledge_base", {})
+    inference = research.get("inference_engine", {})
     coordination = research.get("agent_coordination", {})
     methodology = paper["methodology"] + f"\n\n### Mathematical Formulation\n{formulas}"
     experiments = paper["experimental_results"] + f"\n\n### Benchmark Matrix\n{table}\n\n### Ablation Study\n{ablations}"
