@@ -198,7 +198,48 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
         return {"error": str(detail)}
 
 
+def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize provider output before any preview or export touches it."""
+    normalized = dict(paper) if isinstance(paper, dict) else {}
+    aliases = {
+        "formulas": "mathematical_formulas",
+        "threats": "threats_to_validity",
+        "results": "experimental_results",
+    }
+    for source, target in aliases.items():
+        if target not in normalized and source in normalized:
+            normalized[target] = normalized[source]
+    defaults: dict[str, Any] = {
+        "title": "Untitled Research Manuscript",
+        "abstract": "",
+        "keywords": [],
+        "introduction": "",
+        "related_work": "",
+        "methodology": "",
+        "mathematical_formulas": [],
+        "experimental_results": "",
+        "discussion": "",
+        "threats_to_validity": [],
+        "conclusion": "",
+        "references": [],
+    }
+    for key, default in defaults.items():
+        value = normalized.get(key)
+        if value is None:
+            normalized[key] = default
+        elif isinstance(default, list) and not isinstance(value, list):
+            normalized[key] = [str(value)]
+        elif isinstance(default, str) and not isinstance(value, str):
+            normalized[key] = str(value)
+    normalized["keywords"] = [str(item) for item in normalized["keywords"]]
+    normalized["mathematical_formulas"] = [str(item) for item in normalized["mathematical_formulas"]]
+    normalized["threats_to_validity"] = [str(item) for item in normalized["threats_to_validity"]]
+    normalized["references"] = [str(item) for item in normalized["references"]]
+    return normalized
+
+
 def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
+    paper = sanitize_paper_data(paper)
     table = pd.DataFrame(research.get("benchmark_table", [])).to_markdown(index=False) if research.get("benchmark_table") else "No benchmark rows available."
     models = pd.DataFrame(research.get("models_compared", []))[['name', 'role', 'backbone', 'params_m', 'latency_ms']].to_markdown(index=False) if research.get("models_compared") else "No model catalog available."
     datasets = pd.DataFrame(research.get("datasets_used", []))[['name', 'modality', 'sample_size', 'primary_metric', 'source_url']].to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
@@ -219,6 +260,7 @@ def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
 
 
 def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
+    paper = sanitize_paper_data(paper)
     sections = [
         ("Abstract", paper["abstract"]),
         ("1. Introduction", paper["introduction"]),
@@ -829,6 +871,7 @@ def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
 
 
 def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
+    paper = sanitize_paper_data(paper)
     pdf = st.session_state["pdf_bytes"]
     st.markdown(
         f"<section class='hero'><h1>{escape(paper['title'])}</h1>"

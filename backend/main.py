@@ -118,6 +118,17 @@ WRITING AND EVIDENCE PRINCIPLES:
 
 Return JSON matching WriterOutput exactly. Put detailed prose in section
 fields, not in an unstructured summary.
+
+STRICT JSON CONTRACT:
+Return exactly one valid JSON object and no surrounding commentary. Always
+include every key in this list, even when its value is empty: title, abstract,
+keywords, introduction, related_work, methodology, mathematical_formulas,
+experimental_results, discussion, threats_to_validity, conclusion, references.
+Use list[str] for keywords, mathematical_formulas, threats_to_validity, and
+references; use strings for all prose fields. Never rename keys to formulas,
+threats, results, metadata, knowledge, or inference. Put metadata, knowledge,
+and inference in the supplied research context rather than inventing extra
+top-level keys.
 """
 
 app = FastAPI(
