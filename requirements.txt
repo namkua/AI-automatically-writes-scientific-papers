@@ -17,6 +17,7 @@ reportlab>=4.0
 matplotlib
 pypdf
 pymupdf4llm
+PyMuPDF>=1.24
 # Common Requirements
 torch
 torchvision

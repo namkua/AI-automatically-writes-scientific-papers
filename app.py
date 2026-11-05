@@ -238,11 +238,99 @@ def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
     return normalized
 
 
+def extract_baseline_pdf_text(pdf_bytes: bytes) -> str:
+    """Extract text only; the PDF is never executed or sent anywhere by default."""
+    import pymupdf as fitz
+
+    document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        return "\n".join(page.get_text() for page in document)
+    finally:
+        document.close()
+
+
+def extract_baseline_metadata(text: str) -> dict[str, Any]:
+    """Make an editable first-pass extraction from a baseline paper."""
+    clean_text = re.sub(r"\s+", " ", text).strip()
+    known_models = ("ResNet-50", "ResNet", "BERT", "RoBERTa", "ViT", "CLIP", "LSTM", "Transformer", "GCN", "GraphSAGE", "SVM", "XGBoost")
+    known_datasets = ("CIFAR-10", "ImageNet", "COCO", "AG News", "IMDb", "Shakespeare", "enwik8", "Text8", "MNIST", "LibriSpeech")
+    metrics: dict[str, float] = {}
+    for metric in ("Accuracy", "F1", "Macro-F1", "BLEU", "ROUGE", "CIDEr", "WER", "AUROC", "Latency_ms"):
+        match = re.search(rf"\b{re.escape(metric)}\b\s*(?:@\s*[0-9.]+)?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)\s*%?", clean_text, re.IGNORECASE)
+        if match:
+            metrics[metric] = float(match.group(1))
+    limitation_sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", clean_text) if re.search(r"limitation|future work|however|challenge", sentence, re.IGNORECASE)]
+    return {
+        "model_name": next((model for model in known_models if model.lower() in clean_text.lower()), "Not identified"),
+        "datasets_used": [dataset for dataset in known_datasets if dataset.lower() in clean_text.lower()],
+        "reported_metrics": metrics,
+        "key_limitations": limitation_sentences[:5],
+        "source": "Uploaded baseline PDF",
+        "text_chars": len(text),
+    }
+
+
+def build_baseline_comparison(baseline: dict[str, Any], research: dict[str, Any]) -> dict[str, Any]:
+    proposed_rows = [row for row in research.get("benchmark_table", []) if row.get("role") == "Proposed"]
+    proposed_score = proposed_rows[0].get("primary_metric") if proposed_rows else None
+    primary_name = str(research.get("datasets_used", [{}])[0].get("primary_metric", "Primary metric"))
+    rows = []
+    for metric, original_value in (baseline.get("reported_metrics") or {}).items():
+        comparable = metric.lower().replace("-", "") in primary_name.lower().replace("-", "") or primary_name.lower() in metric.lower()
+        proposed_value = proposed_score
+        if comparable and proposed_value is not None and float(original_value) > 1.0 and float(proposed_value) <= 1.0:
+            proposed_value = float(proposed_value) * 100.0
+        delta = proposed_value - original_value if comparable and proposed_value is not None else None
+        rows.append({
+            "Metric": metric,
+            "Original Paper": original_value,
+            "Proposed Method": round(proposed_value, 4) if comparable and proposed_value is not None else "Not comparable",
+            "Delta": round(delta, 4) if delta is not None else "N/A",
+            "Evidence": "Planning estimate; validate on the same split" if comparable else f"Metric mismatch: proposed uses {primary_name}",
+        })
+    if not rows:
+        rows.append({"Metric": primary_name, "Original Paper": "Not extracted", "Proposed Method": proposed_score or "Not available", "Delta": "N/A", "Evidence": "Human confirmation required before claiming improvement"})
+    return {"baseline": baseline, "rows": rows, "status": "Provisional comparison; not a measured improvement until the same dataset and split are executed."}
+
+
+def safe_frame(rows: list[dict[str, Any]], columns: list[str]) -> pd.DataFrame:
+    frame = pd.DataFrame(rows)
+    for column in columns:
+        if column not in frame.columns:
+            frame[column] = ""
+    return frame[columns]
+
+
+def render_baseline_controls() -> None:
+    with st.expander("📎 Baseline Paper Comparison", expanded=False):
+        st.caption("Upload the original paper, review the extracted fields, then save them before generating.")
+        uploaded = st.file_uploader("Upload baseline paper PDF", type=["pdf"], key="baseline_pdf_upload")
+        if uploaded is not None and st.button("Extract baseline metadata", width="stretch", key="extract_baseline_button"):
+            try:
+                text = extract_baseline_pdf_text(uploaded.getvalue())
+                st.session_state.baseline_metadata = extract_baseline_metadata(text)
+                st.success("Metadata extracted. Review and save the fields below.")
+            except (ImportError, RuntimeError, ValueError) as error:
+                st.error(f"Could not read the PDF: {error}")
+        baseline = st.session_state.get("baseline_metadata")
+        if baseline:
+            model_name = st.text_input("Baseline model", baseline.get("model_name", "Not identified"), key="baseline_model_edit")
+            datasets = st.text_input("Baseline datasets (comma-separated)", ", ".join(baseline.get("datasets_used", [])), key="baseline_datasets_edit")
+            metrics = st.text_area("Reported metrics JSON", json.dumps(baseline.get("reported_metrics", {}), indent=2), key="baseline_metrics_edit")
+            limitations = st.text_area("Key limitations", "\n".join(baseline.get("key_limitations", [])), key="baseline_limitations_edit")
+            if st.button("Save baseline metadata", type="primary", width="stretch", key="save_baseline_button"):
+                try:
+                    st.session_state.baseline_metadata = {**baseline, "model_name": model_name, "datasets_used": [item.strip() for item in datasets.split(",") if item.strip()], "reported_metrics": json.loads(metrics), "key_limitations": [item.strip() for item in limitations.splitlines() if item.strip()]}
+                    st.success("Baseline metadata saved.")
+                except (TypeError, ValueError, json.JSONDecodeError) as error:
+                    st.error(f"Metrics must be valid JSON: {error}")
+
+
 def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     paper = sanitize_paper_data(paper)
     table = pd.DataFrame(research.get("benchmark_table", [])).to_markdown(index=False) if research.get("benchmark_table") else "No benchmark rows available."
-    models = pd.DataFrame(research.get("models_compared", []))[['name', 'role', 'backbone', 'params_m', 'latency_ms']].to_markdown(index=False) if research.get("models_compared") else "No model catalog available."
-    datasets = pd.DataFrame(research.get("datasets_used", []))[['name', 'modality', 'sample_size', 'primary_metric', 'source_url']].to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
+    models = safe_frame(research.get("models_compared", []), ['name', 'role', 'backbone', 'params_m', 'latency_ms']).to_markdown(index=False) if research.get("models_compared") else "No model catalog available."
+    datasets = safe_frame(research.get("datasets_used", []), ['name', 'modality', 'sample_size', 'primary_metric', 'source_url']).to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
     ablations = pd.DataFrame(research.get("ablation_study", [])).to_markdown(index=False) if research.get("ablation_study") else "No ablation rows available."
     stack = ", ".join(research.get("tech_stack", [])) or "Not specified"
     formulas = "\n".join(f"{index}. {formula}" for index, formula in enumerate(paper.get("mathematical_formulas", []), 1)) or "No mathematical formulation available."
@@ -252,11 +340,13 @@ def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     knowledge = research.get("knowledge_base", {})
     inference = research.get("inference_engine", {})
     coordination = research.get("agent_coordination", {})
+    comparison = research.get("baseline_comparison", {})
+    comparison_table = pd.DataFrame(comparison.get("rows", [])).to_markdown(index=False) if comparison.get("rows") else "No baseline paper uploaded."
     methodology = paper["methodology"] + f"\n\n### Mathematical Formulation\n{formulas}"
     experiments = paper["experimental_results"] + f"\n\n### Benchmark Matrix\n{table}\n\n### Ablation Study\n{ablations}"
     sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", methodology),("4. Experiments & Comparative Evaluation", experiments),("5. Discussion & Failure Mode Analysis", paper["discussion"]),("6. Conclusion & Future Directions", paper["conclusion"]),("Threats to Validity", threats)]
     refs = "\n".join(f"{i}. {item}" for i, item in enumerate(paper["references"], 1))
-    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## 7. References\n{refs}\n"
+    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Baseline Paper Comparison\n{comparison.get('status', 'No baseline paper uploaded.')}\n\n{comparison_table}\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## 7. References\n{refs}\n"
 
 
 def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
@@ -273,8 +363,8 @@ def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
     body = "".join(f"<section><h2>{escape(title)}</h2><p>{escape(text).replace(chr(10), '<br>')}</p></section>" for title, text in sections)
     formulas = "".join(f"<div class='formula'>{escape(formula)}</div>" for formula in paper["mathematical_formulas"])
     references = "".join(f"<li>{escape(reference)}</li>" for reference in paper["references"])
-    models = pd.DataFrame(research.get("models_compared", [])).to_html(index=False, border=0, classes="results-table", columns=["name", "role", "backbone", "params_m", "latency_ms"])
-    datasets = pd.DataFrame(research.get("datasets_used", [])).to_html(index=False, border=0, classes="results-table", columns=["name", "modality", "sample_size", "primary_metric", "source_url"])
+    models = safe_frame(research.get("models_compared", []), ["name", "role", "backbone", "params_m", "latency_ms"]).to_html(index=False, border=0, classes="results-table")
+    datasets = safe_frame(research.get("datasets_used", []), ["name", "modality", "sample_size", "primary_metric", "source_url"]).to_html(index=False, border=0, classes="results-table")
     table = pd.DataFrame(research.get("benchmark_table", [])).to_html(index=False, border=0, classes="results-table")
     ablations = pd.DataFrame(research.get("ablation_study", [])).to_html(index=False, border=0, classes="results-table")
     threats = "".join(f"<li>{escape(item)}</li>" for item in paper.get("threats_to_validity", []))
@@ -312,6 +402,7 @@ footer {{ margin-top: 24px; padding-top: 10px; border-top: 1px solid #aeb8c7; co
 
 
 def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
+    paper = sanitize_paper_data(paper)
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4
@@ -433,6 +524,11 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         [item["configuration"], item["removed_component"], item["primary_metric"], item["latency_ms"], item["delta_vs_full"]]
         for item in ablation
     ], [55 * mm, 53 * mm, 24 * mm, 25 * mm, 25 * mm])
+    comparison = research.get("baseline_comparison", {})
+    if comparison.get("rows"):
+        add_table("Baseline Paper Comparison", [["Metric", "Original Paper", "Proposed", "Delta", "Evidence"]] + [
+            [row.get("Metric"), row.get("Original Paper"), row.get("Proposed Method"), row.get("Delta"), row.get("Evidence")] for row in comparison["rows"]
+        ], [30 * mm, 28 * mm, 28 * mm, 20 * mm, 65 * mm])
     with tempfile.TemporaryDirectory(prefix="smart-research-charts-") as chart_dir:
         for chart_path in generate_research_charts(research, chart_dir):
             story.append(Image(BytesIO(chart_path.read_bytes()), width=170 * mm, height=70 * mm))
@@ -902,6 +998,11 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         )
 
     st.markdown("#### Xem trước bản thảo")
+    comparison = research.get("baseline_comparison", {})
+    if comparison.get("rows"):
+        st.subheader("Baseline Paper Comparison")
+        st.warning(comparison.get("status", "Provisional comparison"))
+        st.dataframe(pd.DataFrame(comparison["rows"]), width="stretch", hide_index=True)
     try:
         import pymupdf as fitz
         document = fitz.open(stream=pdf, filetype="pdf")
@@ -982,6 +1083,7 @@ def main() -> None:
         "guardrail_bytes": b"",
         "zip_bytes": b"",
         "artifact_dir": "",
+        "baseline_metadata": None,
     }.items():
         st.session_state.setdefault(key, value)
     with st.sidebar:
@@ -991,6 +1093,7 @@ def main() -> None:
         st.text_input("Lĩnh vực", key="domain")
         st.text_input("Mục tiêu chính", key="objective")
         st.text_area("Ràng buộc", key="constraints", height=75)
+        render_baseline_controls()
         run_clicked = st.button("🚀 Bắt đầu sinh bài báo", type="primary", width="stretch")
     if run_clicked or not st.session_state["full_pipeline_result"]:
         with st.status("🤖 Đang điều phối hệ thống nghiên cứu AI...", expanded=True) as status:
@@ -1007,6 +1110,8 @@ def main() -> None:
             status.write("🛡️ Guardrail đang kiểm tra công thức, benchmark và evidence labels...")
             status.write("📄 Đang biên dịch PDF và đóng gói artifacts...")
             export_research = result["research"]
+            if st.session_state.get("baseline_metadata"):
+                export_research["baseline_comparison"] = build_baseline_comparison(st.session_state.baseline_metadata, export_research)
             paper = result["paper"]
             pdf = pdf_report(paper, export_research)
             zip_bytes, artifact_dir = persist_artifacts(paper, export_research, pdf)
