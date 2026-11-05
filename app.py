@@ -105,6 +105,11 @@ div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock p
 [data-testid="stDataFrame"],[data-testid="stDataFrame"]>div,.stDataFrame,.stTable{max-width:100%!important;overflow-x:auto!important}
 .chat-response{background:#262730!important;color:#FAFAFA!important;border:1px solid #363945!important;border-radius:8px;padding:1rem;margin-top:.75rem;line-height:1.55;overflow-wrap:anywhere}
 [data-testid="stSidebar"]{min-width:18rem;max-width:22rem}
+.metric-card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;min-height:132px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+.metric-card-title{color:var(--muted);font-size:.92rem;font-weight:600;line-height:1.25;min-height:2.5rem;white-space:normal!important;word-wrap:break-word!important;overflow-wrap:anywhere!important}
+.metric-card-title span{display:block;color:var(--muted)}
+.metric-card-value{color:#f8fbff;font-size:1.85rem;line-height:1.1;white-space:nowrap;overflow:visible}
+.metric-card-badge{align-self:flex-start;max-width:100%;padding:.28rem .58rem;border-radius:999px;background:#1a5449;color:#d9fff2;font-size:.78rem;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
 @media (max-width: 760px){.block-container{width:calc(100% - 1rem);padding-left:.5rem;padding-right:.5rem}.hero h1{font-size:1.5rem}.stTabs [data-baseweb="tab"]{font-size:.78rem;padding:.35rem}.architecture-flow{gap:.35rem}.architecture-flow .flow-step{font-size:.82rem}}
 </style>""", unsafe_allow_html=True)
 
@@ -199,12 +204,6 @@ def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     datasets = pd.DataFrame(research.get("datasets_used", []))[['name', 'modality', 'sample_size', 'primary_metric', 'source_url']].to_markdown(index=False) if research.get("datasets_used") else "No dataset catalog available."
     ablations = pd.DataFrame(research.get("ablation_study", [])).to_markdown(index=False) if research.get("ablation_study") else "No ablation rows available."
     stack = ", ".join(research.get("tech_stack", [])) or "Not specified"
-    threats = "\n".join(f"- {item}" for item in paper.get("threats_to_validity", [])) or "Not specified"
-    formulas = "\n".join(f"{index}. `{formula}`" for index, formula in enumerate(paper.get("mathematical_formulas", []), 1))
-    metadata = research.get("project_metadata") or {}
-    metadata_text = "\n".join(f"- {key.replace('_', ' ').title()}: {value}" for key, value in metadata.items()) or "Not specified"
-    knowledge = research.get("knowledge_base", {})
-    inference = research.get("inference_engine", {})
     coordination = research.get("agent_coordination", {})
     methodology = paper["methodology"] + f"\n\n### Mathematical Formulation\n{formulas}"
     experiments = paper["experimental_results"] + f"\n\n### Benchmark Matrix\n{table}\n\n### Ablation Study\n{ablations}"
@@ -629,12 +628,20 @@ def render_header(result: dict[str, Any]) -> None:
     st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Phòng thí nghiệm nghiên cứu AI · Hệ thống đa tác tử</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
     metric_rows = [st.columns(3), st.columns(3)]
     cards = metric_rows[0] + metric_rows[1]
-    cards[0].metric(f"Primary Score ({metric_name})", f"{proposed_row['primary_metric']:.2f}", "Cao hơn tốt hơn · mô phỏng")
-    cards[1].metric("Latency (Thời gian phản hồi, ms)", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M tham số")
-    cards[2].metric("Experiment Scope (Quy mô thử nghiệm)", f"{len(research['datasets_used'])} datasets", "Số tập dữ liệu được đánh giá")
-    cards[3].metric("Review Score (Điểm phản biện)", f"{review['overall_score']:.1f} / 10", f"Đánh giá cấu trúc: {review['verdict']}")
-    cards[4].metric("Reasoning Consistency (Độ nhất quán)", f"{research.get('reasoning_consistency_score', 0):.2f}", "Kiểm tra logic định tuyến")
-    cards[5].metric("Knowledge Precision (Độ chính xác tri thức)", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "Mức khớp danh mục tri thức")
+    metric_cards = [
+        (f"Primary Score ({metric_name})", "Điểm chất lượng chính", f"{proposed_row['primary_metric']:.2f}", "Higher is better · simulation"),
+        ("Latency", "Thời gian phản hồi, ms", f"{proposed['latency_ms']:.1f} ms", f"{proposed['params_m']:.1f}M parameters"),
+        ("Experiment Scope", "Quy mô thử nghiệm", f"{len(research['datasets_used'])} datasets", "Evaluated datasets"),
+        ("Review Score", "Điểm phản biện", f"{review['overall_score']:.1f} / 10", f"Structural review: {review['verdict']}"),
+        ("Reasoning Consistency", "Độ nhất quán suy luận", f"{research.get('reasoning_consistency_score', 0):.2f}", "Routing logic audit"),
+        ("Knowledge Precision", "Độ chính xác tri thức", f"{research.get('knowledge_retrieval_precision', 0):.2f}", "Knowledge catalog match"),
+    ]
+    for column, (title, title_vi, value, badge) in zip(cards, metric_cards):
+        with column:
+            st.markdown(
+                f"<div class='metric-card'><div class='metric-card-title'>{escape(title)}<span>({escape(title_vi)})</span></div><div class='metric-card-value'>{escape(value)}</div><div class='metric-card-badge'>{escape(badge)}</div></div>",
+                unsafe_allow_html=True,
+            )
 
 
 def render_plan(plan: dict[str, Any]) -> None:
