@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import tempfile
 import time
@@ -267,7 +268,34 @@ def extract_baseline_metadata(text: str) -> dict[str, Any]:
         "key_limitations": limitation_sentences[:5],
         "source": "Uploaded baseline PDF",
         "text_chars": len(text),
+        "extraction_mode": "Local heuristic",
     }
+
+
+def extract_baseline_metadata_with_llm(text: str) -> dict[str, Any] | None:
+    """Use Gemini to extract structured facts from the complete local PDF text."""
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return None
+    prompt = """You are extracting facts from a scientific paper for a human-reviewed baseline comparison.
+Return exactly one valid JSON object and no commentary with these keys:
+model_name (string), datasets_used (list of strings), reported_metrics (object mapping metric names to numeric values),
+key_limitations (list of strings), method_summary (string), contributions (list of strings),
+reported_results (list of strings), citation (string).
+Use only facts explicitly present in the paper. Do not infer missing numbers. Use [] or "" when unavailable.
+This JSON is a draft for human confirmation, not a publication claim.
+
+FULL PAPER TEXT:
+""" + text[:120000]
+    try:
+        from backend.main import _safe_live_call
+        payload = _safe_live_call(api_key, prompt)
+        if not isinstance(payload, dict):
+            return None
+        heuristic = extract_baseline_metadata(text)
+        return {**heuristic, **payload, "text_chars": len(text), "extraction_mode": "Gemini full-text extraction; human confirmation required"}
+    except Exception:
+        return None
 
 
 def build_baseline_comparison(baseline: dict[str, Any], research: dict[str, Any]) -> dict[str, Any]:
@@ -308,8 +336,9 @@ def render_baseline_controls() -> None:
         if uploaded is not None and st.button("Extract baseline metadata", width="stretch", key="extract_baseline_button"):
             try:
                 text = extract_baseline_pdf_text(uploaded.getvalue())
-                st.session_state.baseline_metadata = extract_baseline_metadata(text)
-                st.success("Metadata extracted. Review and save the fields below.")
+                extracted = extract_baseline_metadata_with_llm(text) or extract_baseline_metadata(text)
+                st.session_state.baseline_metadata = extracted
+                st.success(f"Read {len(text):,} characters from the full PDF. {extracted.get('extraction_mode', 'Metadata extracted')}. Review and save the fields below.")
             except (ImportError, RuntimeError, ValueError) as error:
                 st.error(f"Could not read the PDF: {error}")
         baseline = st.session_state.get("baseline_metadata")
@@ -318,9 +347,11 @@ def render_baseline_controls() -> None:
             datasets = st.text_input("Baseline datasets (comma-separated)", ", ".join(baseline.get("datasets_used", [])), key="baseline_datasets_edit")
             metrics = st.text_area("Reported metrics JSON", json.dumps(baseline.get("reported_metrics", {}), indent=2), key="baseline_metrics_edit")
             limitations = st.text_area("Key limitations", "\n".join(baseline.get("key_limitations", [])), key="baseline_limitations_edit")
+            method_summary = st.text_area("Baseline method summary", baseline.get("method_summary", ""), key="baseline_method_edit")
+            contributions = st.text_area("Baseline contributions", "\n".join(baseline.get("contributions", [])), key="baseline_contributions_edit")
             if st.button("Save baseline metadata", type="primary", width="stretch", key="save_baseline_button"):
                 try:
-                    st.session_state.baseline_metadata = {**baseline, "model_name": model_name, "datasets_used": [item.strip() for item in datasets.split(",") if item.strip()], "reported_metrics": json.loads(metrics), "key_limitations": [item.strip() for item in limitations.splitlines() if item.strip()]}
+                    st.session_state.baseline_metadata = {**baseline, "model_name": model_name, "datasets_used": [item.strip() for item in datasets.split(",") if item.strip()], "reported_metrics": json.loads(metrics), "key_limitations": [item.strip() for item in limitations.splitlines() if item.strip()], "method_summary": method_summary, "contributions": [item.strip() for item in contributions.splitlines() if item.strip()]}
                     st.success("Baseline metadata saved.")
                 except (TypeError, ValueError, json.JSONDecodeError) as error:
                     st.error(f"Metrics must be valid JSON: {error}")
@@ -342,11 +373,19 @@ def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     coordination = research.get("agent_coordination", {})
     comparison = research.get("baseline_comparison", {})
     comparison_table = pd.DataFrame(comparison.get("rows", [])).to_markdown(index=False) if comparison.get("rows") else "No baseline paper uploaded."
+    baseline = comparison.get("baseline", {})
+    baseline_details = "\n".join([
+        f"- Model: {baseline.get('model_name', 'Not identified')}",
+        f"- Datasets: {', '.join(baseline.get('datasets_used', [])) or 'Not identified'}",
+        f"- Method: {baseline.get('method_summary', 'Not extracted')}",
+        f"- Contributions: {'; '.join(baseline.get('contributions', [])) or 'Not extracted'}",
+        f"- Limitations: {'; '.join(baseline.get('key_limitations', [])) or 'Not extracted'}",
+    ]) if baseline else "No baseline paper uploaded."
     methodology = paper["methodology"] + f"\n\n### Mathematical Formulation\n{formulas}"
     experiments = paper["experimental_results"] + f"\n\n### Benchmark Matrix\n{table}\n\n### Ablation Study\n{ablations}"
     sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", methodology),("4. Experiments & Comparative Evaluation", experiments),("5. Discussion & Failure Mode Analysis", paper["discussion"]),("6. Conclusion & Future Directions", paper["conclusion"]),("Threats to Validity", threats)]
     refs = "\n".join(f"{i}. {item}" for i, item in enumerate(paper["references"], 1))
-    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Baseline Paper Comparison\n{comparison.get('status', 'No baseline paper uploaded.')}\n\n{comparison_table}\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## 7. References\n{refs}\n"
+    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Baseline Paper Comparison\n{comparison.get('status', 'No baseline paper uploaded.')}\n\n### Extracted Baseline Details\n{baseline_details}\n\n### Quantitative Comparison\n{comparison_table}\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## 7. References\n{refs}\n"
 
 
 def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
@@ -529,6 +568,14 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         add_table("Baseline Paper Comparison", [["Metric", "Original Paper", "Proposed", "Delta", "Evidence"]] + [
             [row.get("Metric"), row.get("Original Paper"), row.get("Proposed Method"), row.get("Delta"), row.get("Evidence")] for row in comparison["rows"]
         ], [30 * mm, 28 * mm, 28 * mm, 20 * mm, 65 * mm])
+        baseline = comparison.get("baseline", {})
+        story.append(Paragraph("Extracted Baseline Details", heading_style))
+        add_academic_text("\n\n".join([
+            f"Model: {baseline.get('model_name', 'Not identified')}",
+            f"Datasets: {', '.join(baseline.get('datasets_used', [])) or 'Not identified'}",
+            f"Method: {baseline.get('method_summary', 'Not extracted')}",
+            f"Limitations: {'; '.join(baseline.get('key_limitations', [])) or 'Not extracted'}",
+        ]))
     with tempfile.TemporaryDirectory(prefix="smart-research-charts-") as chart_dir:
         for chart_path in generate_research_charts(research, chart_dir):
             story.append(Image(BytesIO(chart_path.read_bytes()), width=170 * mm, height=70 * mm))
