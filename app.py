@@ -7,6 +7,7 @@ import re
 import tempfile
 import time
 import unicodedata
+import uuid
 import zipfile
 from datetime import datetime
 from io import BytesIO
@@ -29,6 +30,10 @@ except ImportError:
     HAS_PLOTLY = False
 
 st.set_page_config(page_title="Phòng thí nghiệm nghiên cứu AI", page_icon="AI", layout="wide", initial_sidebar_state="expanded")
+
+MAX_BASELINE_PDF_BYTES = 20 * 1024 * 1024
+MAX_BASELINE_PDF_PAGES = 15
+MAX_BASELINE_PDF_TEXT_CHARS = 300_000
 st.markdown("""
 <style>
 :root{--ink:#FAFAFA;--muted:#C7CBD4;--panel:#262730;--line:#454752;--accent:#FF4B4B;--accent-hover:#E03E3E;--code:#1E1E1E}
@@ -181,7 +186,11 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
         "require_verified_data": False,
     }
     try:
-        response = requests.post("http://localhost:8000/api/pipeline/run", json=payload, timeout=60)
+        api_key = os.getenv("SMART_RESEARCH_API_KEY", "").strip()
+        headers = {"X-API-Key": api_key} if api_key else {}
+        response = requests.post(
+            "http://localhost:8000/api/pipeline/run", json=payload, headers=headers, timeout=60
+        )
         if response.ok:
             return response.json()
         try:
@@ -239,13 +248,27 @@ def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
     return normalized
 
 
-def extract_baseline_pdf_text(pdf_bytes: bytes) -> str:
-    """Extract text only; the PDF is never executed or sent anywhere by default."""
+def extract_baseline_pdf_text(
+    pdf_bytes: bytes,
+    max_pages: int = MAX_BASELINE_PDF_PAGES,
+    max_chars: int = MAX_BASELINE_PDF_TEXT_CHARS,
+) -> str:
+    """Extract bounded text; the PDF is never executed or sent anywhere by default."""
     import pymupdf as fitz
 
+    if len(pdf_bytes) > MAX_BASELINE_PDF_BYTES:
+        raise ValueError("PDF is larger than the 20 MB upload limit.")
     document = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
-        return "\n".join(page.get_text() for page in document)
+        pages: list[str] = []
+        remaining = max_chars
+        for page_index in range(min(document.page_count, max_pages)):
+            page_text = document.load_page(page_index).get_text()[:remaining]
+            pages.append(page_text)
+            remaining -= len(page_text)
+            if remaining <= 0:
+                break
+        return "\n".join(pages)
     finally:
         document.close()
 
@@ -334,13 +357,22 @@ def render_baseline_controls() -> None:
         st.caption("Upload the original paper, review the extracted fields, then save them before generating.")
         uploaded = st.file_uploader("Upload baseline paper PDF", type=["pdf"], key="baseline_pdf_upload")
         if uploaded is not None and st.button("Extract baseline metadata", width="stretch", key="extract_baseline_button"):
-            try:
-                text = extract_baseline_pdf_text(uploaded.getvalue())
-                extracted = extract_baseline_metadata_with_llm(text) or extract_baseline_metadata(text)
-                st.session_state.baseline_metadata = extracted
-                st.success(f"Read {len(text):,} characters from the full PDF. {extracted.get('extraction_mode', 'Metadata extracted')}. Review and save the fields below.")
-            except (ImportError, RuntimeError, ValueError) as error:
-                st.error(f"Could not read the PDF: {error}")
+            if uploaded.size > MAX_BASELINE_PDF_BYTES:
+                st.error("PDF exceeds the 20 MB limit. Please upload a smaller paper.")
+            else:
+                try:
+                    pdf_bytes = uploaded.getvalue()
+                    text = extract_baseline_pdf_text(pdf_bytes)
+                    extracted = extract_baseline_metadata_with_llm(text) or extract_baseline_metadata(text)
+                    st.session_state.baseline_metadata = extracted
+                    st.success(
+                        f"Read up to {MAX_BASELINE_PDF_PAGES} pages ({len(text):,} characters). "
+                        f"{extracted.get('extraction_mode', 'Metadata extracted')}. Review and save the fields below."
+                    )
+                except MemoryError:
+                    st.error("The PDF used more memory than available. Try a smaller or shorter paper.")
+                except Exception as error:
+                    st.error(f"Could not read the PDF: {error}")
         baseline = st.session_state.get("baseline_metadata")
         if baseline:
             model_name = st.text_input("Baseline model", baseline.get("model_name", "Not identified"), key="baseline_model_edit")
@@ -735,7 +767,7 @@ def _latex_source(paper: dict[str, Any], research: dict[str, Any]) -> str:
 def persist_artifacts(paper: dict[str, Any], research: dict[str, Any], pdf: bytes) -> tuple[bytes, Path]:
     root = Path(__file__).resolve().parent / "results" / "artifacts"
     slug = re.sub(r"[^a-z0-9]+", "-", paper["title"].lower()).strip("-")[:70] or "research-paper"
-    run_dir = root / f"{slug}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    run_dir = root / f"{slug}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{uuid.uuid4().hex[:8]}"
     charts_dir = run_dir / "charts"
     charts_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "guardrail_report.json").write_text(

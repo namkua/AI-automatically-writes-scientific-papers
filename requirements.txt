@@ -1,43 +1,17 @@
-# LLM APIs
-anthropic
-aider-chat
-backoff
-openai
+# Core application dependencies
 google-genai
 pydantic>=2.0
 fastapi>=0.110
 uvicorn[standard]>=0.30
 requests>=2.31
-streamlit>=1.36
+streamlit>=1.48.0
 pandas>=2.0
 plotly>=5.20
-streamlit-extras>=1.6
 reportlab>=4.0
-# Viz
 matplotlib
-pypdf
-pymupdf4llm
 PyMuPDF>=1.24
-# Common Requirements
-torch
-torchvision
 numpy
-transformers
-datasets
-einops
-einx
-tensordict
-tiktoken
-wandb
-tqdm
+tabulate
 
-# Optional evidence and domain integrations used by Smart Research Lab
-google-generativeai
-pyalex
-peft
-accelerate
-timm
-gymnasium
-stable-baselines3
-librosa
-speechbrain
+# Optional research, experiment, and legacy integrations:
+#   python -m pip install -r requirements-optional.txt

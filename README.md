@@ -85,6 +85,14 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+The core requirements install the Streamlit application and API. Optional
+research models and integrations are in `requirements-optional.txt`; install
+them only when you need those experiments:
+
+```powershell
+pip install -r requirements-optional.txt
+```
+
 If PowerShell blocks activation, run the project with the interpreter directly:
 
 ```powershell
@@ -108,6 +116,26 @@ mode.
 ```powershell
 $env:GEMINI_API_KEY = "your-key"
 ```
+
+The API accepts loopback requests by default for local development. Before
+allowing access from another machine or through a reverse proxy, set the same
+shared API key in the backend and Streamlit process. Remote API routes require
+it in the `X-API-Key` header. The in-memory per-client limit defaults to 10 API
+requests per minute and can be changed with `API_RATE_LIMIT_PER_MINUTE`.
+
+```powershell
+$env:SMART_RESEARCH_API_KEY = "a-long-random-secret"
+$env:CORS_ALLOWED_ORIGINS = "https://your-streamlit-domain.example"
+```
+
+The backend only permits the explicit origins in `CORS_ALLOWED_ORIGINS`; local
+Streamlit origins on ports 8501 are allowed by default. Health checks remain
+public. Set the shared key whenever a reverse proxy makes the API reachable
+outside loopback. The rate limiter is process-local, so multi-worker deployments
+should enforce an additional shared limit at the reverse proxy/API gateway.
+
+Baseline PDF uploads are capped at 20 MB, 15 pages, and 300,000 extracted text
+characters to bound memory use during metadata extraction.
 
 Do not commit API keys, `.env` files, virtual environments, generated PDFs, or
 local IDE settings.
@@ -194,8 +222,8 @@ Run adversarial topic coverage:
 The adversarial suite covers short topics, Vietnamese input, mixed language,
 LaTeX/XML-like characters, symbols, and unusual domains.
 
-The repository also contains a GitHub Actions smoke workflow at
-`.github/workflows/smoke_test.yml`.
+GitHub Actions runs the compile check and both pipeline suites, plus the
+ConvNeur smoke checks, through `.github/workflows/smoke_test.yml`.
 
 ## Project layout
 

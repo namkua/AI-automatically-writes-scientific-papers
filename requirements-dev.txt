@@ -1,0 +1,10 @@
+-r requirements.txt
+
+# ConvNeur smoke test dependencies.
+pytest
+torch
+torchvision
+einops
+einx
+tensordict
+timm
