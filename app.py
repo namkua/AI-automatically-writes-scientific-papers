@@ -974,9 +974,9 @@ def render_benchmarks(research: dict[str, Any]) -> None:
             ),
             use_container_width=True,
         )
-    st.subheader("So sánh với bài gốc và các baseline")
+    st.subheader("So sánh các mô hình trong benchmark nội bộ")
     benchmark = pd.DataFrame(research["benchmark_table"])
-    st.caption("Bảng này giữ cả baseline và phương pháp đề xuất để đối chiếu trực tiếp; các giá trị mô phỏng vẫn có nhãn bằng chứng.")
+    st.caption("Bảng và biểu đồ đối chiếu phương pháp đề xuất với các baseline do hệ thống tạo cho benchmark này. Đây không phải so sánh với PDF bài báo gốc đã upload; xem nhận xét bài mẫu ở tab Cấu hình chủ đề.")
     st.dataframe(display_frame(benchmark), use_container_width=True, hide_index=True)
     if HAS_PLOTLY:
         benchmark_chart = benchmark.copy()
