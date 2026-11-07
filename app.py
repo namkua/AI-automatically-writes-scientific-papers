@@ -293,6 +293,13 @@ def extract_baseline_metadata_with_llm(text: str) -> dict[str, Any] | None:
     """Extract only facts accompanied by verbatim, checkable source snippets."""
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(Path(__file__).resolve().with_name(".env"), override=False)
+        except ImportError:
+            pass
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
         return None
     prompt = """Extract facts from this paper for a human-reviewed comparison. Return JSON only, using this schema:
 {
