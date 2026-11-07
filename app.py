@@ -322,26 +322,63 @@ FULL PAPER TEXT:
 
 
 def build_baseline_comparison(baseline: dict[str, Any], research: dict[str, Any]) -> dict[str, Any]:
+    """Compare only facts with a defensible like-for-like match."""
+    models = [row for row in research.get("models_compared", []) if row.get("role") == "Proposed"]
+    proposed_model = models[0] if models else {}
+    datasets = [item.get("name", "") for item in research.get("datasets_used", [])]
     proposed_rows = [row for row in research.get("benchmark_table", []) if row.get("role") == "Proposed"]
-    proposed_score = proposed_rows[0].get("primary_metric") if proposed_rows else None
-    primary_name = str(research.get("datasets_used", [{}])[0].get("primary_metric", "Primary metric"))
-    rows = []
-    for metric, original_value in (baseline.get("reported_metrics") or {}).items():
-        comparable = metric.lower().replace("-", "") in primary_name.lower().replace("-", "") or primary_name.lower() in metric.lower()
-        proposed_value = proposed_score
-        if comparable and proposed_value is not None and float(original_value) > 1.0 and float(proposed_value) <= 1.0:
-            proposed_value = float(proposed_value) * 100.0
-        delta = proposed_value - original_value if comparable and proposed_value is not None else None
-        rows.append({
-            "Metric": metric,
-            "Original Paper": original_value,
-            "Proposed Method": round(proposed_value, 4) if comparable and proposed_value is not None else "Not comparable",
-            "Delta": round(delta, 4) if delta is not None else "N/A",
-            "Evidence": "Planning estimate; validate on the same split" if comparable else f"Metric mismatch: proposed uses {primary_name}",
-        })
-    if not rows:
-        rows.append({"Metric": primary_name, "Original Paper": "Not extracted", "Proposed Method": proposed_score or "Not available", "Delta": "N/A", "Evidence": "Human confirmation required before claiming improvement"})
-    return {"baseline": baseline, "rows": rows, "status": "Provisional comparison; not a measured improvement until the same dataset and split are executed."}
+    proposed_row = proposed_rows[0] if proposed_rows else {}
+    baseline_datasets = baseline.get("datasets_used") or []
+    shared_datasets = {str(name).strip().casefold() for name in datasets} & {str(name).strip().casefold() for name in baseline_datasets}
+    primary_metric = str(proposed_row.get("primary_metric_name") or (research.get("datasets_used", [{}])[0].get("primary_metric", "")))
+    reported_metrics = baseline.get("reported_metrics") or {}
+    matched_metric = next((
+        (name, value) for name, value in reported_metrics.items()
+        if str(name).strip().casefold() == primary_metric.strip().casefold()
+    ), None)
+    rows = [
+        {"Tiêu chí": "Model", "Bài gốc": baseline.get("model_name") or "Chưa trích xuất", "Bài mới": proposed_model.get("name") or "Chưa có", "Delta / ghi chú": "Khác kiến trúc; không quy thành hơn kém"},
+        {"Tiêu chí": "Dataset", "Bài gốc": ", ".join(baseline_datasets) or "Chưa trích xuất", "Bài mới": ", ".join(datasets) or "Chưa có", "Delta / ghi chú": "Có dataset trùng" if shared_datasets else "Không có dataset trùng"},
+    ]
+    if matched_metric and shared_datasets and proposed_row:
+        original_value = float(matched_metric[1])
+        proposed_value = float(proposed_row.get("primary_metric", 0))
+        # Normalize proportions to percentages only when the scales clearly differ.
+        if original_value > 1 and 0 <= proposed_value <= 1:
+            proposed_value *= 100
+        elif proposed_value > 1 and 0 <= original_value <= 1:
+            original_value *= 100
+        delta = proposed_value - original_value
+        rows.append({"Tiêu chí": matched_metric[0], "Bài gốc": original_value, "Bài mới": proposed_value, "Delta / ghi chú": f"{delta:+.3g} (mô phỏng)"})
+    else:
+        reason = "Không cùng dataset" if not shared_datasets else "Không khớp tên metric hoặc thiếu số liệu"
+        rows.append({"Tiêu chí": primary_metric or "Metric chính", "Bài gốc": "Chưa đối chiếu được", "Bài mới": proposed_row.get("primary_metric", "Chưa có"), "Delta / ghi chú": reason})
+    rows.append({"Tiêu chí": "Latency", "Bài gốc": "Chưa trích xuất", "Bài mới": f"{proposed_model['latency_ms']} ms (ước tính)" if proposed_model.get("latency_ms") is not None else "Chưa có", "Delta / ghi chú": "Thiếu latency gốc đo cùng điều kiện"})
+    status = "Chỉ là đối chiếu thông tin; số liệu bài mới là ước tính kế hoạch, không phải kết quả thực nghiệm."
+    if not shared_datasets:
+        status += " Hai bài không dùng dataset trùng nên không thể kết luận hơn kém về hiệu năng."
+    return {"baseline": baseline, "rows": rows, "status": status}
+
+
+def baseline_review_notes(comparison: dict[str, Any]) -> list[str]:
+    baseline = comparison.get("baseline", {})
+    model = baseline.get("model_name") or "chưa xác định được model gốc"
+    datasets = baseline.get("datasets_used") or []
+    dataset_text = ", ".join(datasets) if datasets else "chưa xác định được dataset gốc"
+    shared = any(row.get("Delta / ghi chú") == "Có dataset trùng" for row in comparison.get("rows", []))
+    limitations = baseline.get("key_limitations") or []
+    if limitations:
+        weakness = str(limitations[0]).strip()
+        if len(weakness) > 240:
+            weakness = weakness[:237].rstrip() + "..."
+    else:
+        weakness = "PDF chưa cung cấp giới hạn được trích xuất đáng tin cậy; không suy đoán thay tác giả."
+    conclusion = "Có dataset trùng để xem xét tiếp, nhưng số liệu bài mới vẫn là ước tính." if shared else "Chưa thể kết luận bài mới tốt hơn: dataset không trùng hoặc chưa trích xuất đủ dữ liệu."
+    return [
+        f"Bài gốc dùng {model}; dataset được trích xuất: {dataset_text}.",
+        f"Điểm yếu bài gốc: {weakness}",
+        conclusion,
+    ]
 
 
 def safe_frame(rows: list[dict[str, Any]], columns: list[str]) -> pd.DataFrame:
@@ -1147,6 +1184,17 @@ def render_review(review: dict[str, Any]) -> None:
                 st.markdown(f"- {item}")
 
 
+def render_baseline_review(research: dict[str, Any]) -> None:
+    comparison = research.get("baseline_comparison")
+    if not comparison:
+        return
+    st.subheader("Nhận xét bài mẫu")
+    for note in baseline_review_notes(comparison):
+        st.markdown(f"- {note}")
+    st.dataframe(pd.DataFrame(comparison.get("rows", [])), use_container_width=True, hide_index=True)
+    st.caption(comparison.get("status", ""))
+
+
 def main() -> None:
     first = next(iter(PRESETS))
     for key, value in {"topic":first, **PRESETS[first]}.items():
@@ -1225,6 +1273,7 @@ def main() -> None:
         render_method(plan, paper)
         render_verified_datasets()
         render_review(review)
+        render_baseline_review(research)
     with tabs[1]:
         render_paper(paper, research)
     with tabs[2]:
