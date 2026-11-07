@@ -274,49 +274,145 @@ def extract_baseline_pdf_text(
 
 
 def extract_baseline_metadata(text: str) -> dict[str, Any]:
-    """Make an editable first-pass extraction from a baseline paper."""
-    clean_text = re.sub(r"\s+", " ", text).strip()
-    known_models = ("ResNet-50", "ResNet", "BERT", "RoBERTa", "ViT", "CLIP", "LSTM", "Transformer", "GCN", "GraphSAGE", "SVM", "XGBoost")
-    known_datasets = ("CIFAR-10", "ImageNet", "COCO", "AG News", "IMDb", "Shakespeare", "enwik8", "Text8", "MNIST", "LibriSpeech")
-    metrics: dict[str, float] = {}
-    for metric in ("Accuracy", "F1", "Macro-F1", "BLEU", "ROUGE", "CIDEr", "WER", "AUROC", "Latency_ms"):
-        match = re.search(rf"\b{re.escape(metric)}\b\s*(?:@\s*[0-9.]+)?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)\s*%?", clean_text, re.IGNORECASE)
-        if match:
-            metrics[metric] = float(match.group(1))
-    limitation_sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", clean_text) if re.search(r"limitation|future work|however|challenge", sentence, re.IGNORECASE)]
+    """Fail closed when no evidence-grounded extraction model is available."""
     return {
-        "model_name": next((model for model in known_models if model.lower() in clean_text.lower()), "Not identified"),
-        "datasets_used": [dataset for dataset in known_datasets if dataset.lower() in clean_text.lower()],
-        "reported_metrics": metrics,
-        "key_limitations": limitation_sentences[:5],
+        "model_name": "Chưa xác định",
+        "datasets_used": [],
+        "reported_metrics": {},
+        "key_limitations": [],
+        "method_summary": "",
+        "contributions": [],
+        "extraction_evidence": {},
         "source": "Uploaded baseline PDF",
         "text_chars": len(text),
-        "extraction_mode": "Local heuristic",
+        "extraction_mode": "Chưa trích xuất tự động; không đoán khi thiếu bằng chứng",
     }
 
 
 def extract_baseline_metadata_with_llm(text: str) -> dict[str, Any] | None:
-    """Use Gemini to extract structured facts from the complete local PDF text."""
+    """Extract only facts accompanied by verbatim, checkable source snippets."""
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         return None
-    prompt = """You are extracting facts from a scientific paper for a human-reviewed baseline comparison.
-Return exactly one valid JSON object and no commentary with these keys:
-model_name (string), datasets_used (list of strings), reported_metrics (object mapping metric names to numeric values),
-key_limitations (list of strings), method_summary (string), contributions (list of strings),
-reported_results (list of strings), citation (string).
-Use only facts explicitly present in the paper. Do not infer missing numbers. Use [] or "" when unavailable.
-This JSON is a draft for human confirmation, not a publication claim.
+    prompt = """Extract facts from this paper for a human-reviewed comparison. Return JSON only, using this schema:
+{
+  "model_name": {"value": "", "evidence": ""},
+  "datasets_used": [{"value": "", "evidence": ""}],
+  "reported_metrics": [{"name": "", "value": 0, "evidence": ""}],
+  "key_limitations": [{"value": "", "evidence": ""}],
+  "method_summary": {"value": "", "evidence": ""},
+  "contributions": [{"value": "", "evidence": ""}],
+  "citation": ""
+}
+Rules:
+- Only identify the paper's own main method/model, datasets actually used in its experiments, and results explicitly reported by its authors. Ignore names appearing only in related work or references.
+- A limitation must be explicitly acknowledged by the authors. Do not turn generic future work, a challenge in the field, or another paper's limitation into this paper's weakness.
+- Every non-empty value MUST have a short verbatim evidence quote copied exactly from the supplied text. Keep evidence under 35 words. If unsure or absent, use an empty value/list.
+- Never infer a metric, value, dataset, model, or limitation. Keep metric values in the exact scale shown (for example 84.2, not 0.842, when the paper says 84.2%).
 
-FULL PAPER TEXT:
+PAPER TEXT:
 """ + text[:120000]
     try:
         from backend.main import _safe_live_call
         payload = _safe_live_call(api_key, prompt)
         if not isinstance(payload, dict):
             return None
-        heuristic = extract_baseline_metadata(text)
-        return {**heuristic, **payload, "text_chars": len(text), "extraction_mode": "Gemini full-text extraction; human confirmation required"}
+        normalized_source = re.sub(r"\s+", " ", text).casefold()
+
+        def supported(value: Any, evidence: Any) -> bool:
+            value_text = re.sub(r"\s+", " ", str(value or "")).strip()
+            evidence_text = re.sub(r"\s+", " ", str(evidence or "")).strip()
+            normalized_evidence = evidence_text.casefold()
+            prior_work_context = re.search(r"\b(prior|previous|related|earlier) work\b|\bother studies\b|\breferences?\b|\bcitations?\b", normalized_evidence)
+            return bool(
+                value_text and evidence_text and len(evidence_text.split()) <= 45
+                and normalized_evidence in normalized_source and not prior_work_context
+            )
+
+        def clean_items(
+            items: Any,
+            *,
+            value_must_be_in_evidence: bool = True,
+            require_experimental_context: bool = False,
+            require_limitation_context: bool = False,
+        ) -> list[dict[str, str]]:
+            if not isinstance(items, list):
+                return []
+            cleaned = []
+            for item in items:
+                if not isinstance(item, dict) or not supported(item.get("value"), item.get("evidence")):
+                    continue
+                value = str(item.get("value", "")).strip()
+                evidence = str(item.get("evidence", "")).strip()
+                evidence_lower = evidence.casefold()
+                if value_must_be_in_evidence and value.casefold() not in evidence.casefold():
+                    continue
+                if require_experimental_context:
+                    escaped_value = re.escape(value.casefold())
+                    evidence_lower = evidence.casefold()
+                    experiment_verbs = r"(?:evaluate|evaluated|evaluating|test|tested|train|trained|experiment|experiments|benchmark|use|used|using|report|reported)"
+                    if not re.search(rf"{experiment_verbs}.{{0,80}}{escaped_value}|{escaped_value}.{{0,80}}{experiment_verbs}", evidence_lower):
+                        continue
+                if require_limitation_context and not re.search(r"\blimitations?\b|\bwe acknowledge\b|\bwe note\b", evidence_lower):
+                    continue
+                cleaned.append({"value": value, "evidence": evidence})
+            return cleaned
+
+        model = payload.get("model_name") if isinstance(payload.get("model_name"), dict) else {}
+        model_value = str(model.get("value", "")).strip()
+        model_evidence = str(model.get("evidence", "")).strip()
+        if not supported(model_value, model_evidence) or model_value.casefold() not in model_evidence.casefold():
+            model_value, model_evidence = "Chưa xác định", ""
+
+        datasets = clean_items(payload.get("datasets_used"), require_experimental_context=True)
+        limitations = clean_items(
+            payload.get("key_limitations"),
+            value_must_be_in_evidence=False,
+            require_limitation_context=True,
+        )
+        contributions = clean_items(payload.get("contributions"), value_must_be_in_evidence=False)
+        metrics: dict[str, float] = {}
+        metric_evidence: dict[str, str] = {}
+        raw_metrics = payload.get("reported_metrics")
+        if isinstance(raw_metrics, list):
+            for item in raw_metrics:
+                if not isinstance(item, dict) or not supported(item.get("name"), item.get("evidence")):
+                    continue
+                try:
+                    value = float(item.get("value"))
+                except (TypeError, ValueError):
+                    continue
+                evidence = str(item["evidence"])
+                number_forms = {str(value), f"{value:g}"}
+                if not any(re.search(rf"(?<![\w.]){re.escape(number)}(?![\w.])", evidence) for number in number_forms):
+                    continue
+                name = str(item["name"]).strip()
+                metrics[name] = value
+                metric_evidence[name] = evidence
+
+        method = payload.get("method_summary") if isinstance(payload.get("method_summary"), dict) else {}
+        method_value = str(method.get("value", "")).strip()
+        method_evidence = str(method.get("evidence", "")).strip()
+        if not supported(method_value, method_evidence):
+            method_value, method_evidence = "", ""
+
+        return {
+            "model_name": model_value,
+            "datasets_used": [item["value"] for item in datasets],
+            "reported_metrics": metrics,
+            "key_limitations": [item["value"] for item in limitations],
+            "method_summary": method_value,
+            "contributions": [item["value"] for item in contributions],
+            "extraction_evidence": {
+                "model_name": model_evidence,
+                "datasets_used": [item["evidence"] for item in datasets],
+                "reported_metrics": metric_evidence,
+                "key_limitations": [item["evidence"] for item in limitations],
+            },
+            "source": "Uploaded baseline PDF",
+            "text_chars": len(text),
+            "extraction_mode": "Gemini extraction; unsupported fields removed, evidence quotes attached",
+        }
     except Exception:
         return None
 
@@ -393,6 +489,22 @@ def render_baseline_controls() -> None:
     with st.expander("📎 Baseline Paper Comparison", expanded=False):
         st.caption("Upload the original paper, review the extracted fields, then save them before generating.")
         uploaded = st.file_uploader("Upload baseline paper PDF", type=["pdf"], key="baseline_pdf_upload")
+        if uploaded is not None:
+            upload_signature = (uploaded.name, uploaded.size)
+            previous_signature = st.session_state.get("baseline_pdf_signature")
+            if previous_signature != upload_signature and st.session_state.get("baseline_metadata") is not None:
+                st.session_state.baseline_metadata = None
+                for field_key in (
+                    "baseline_model_edit",
+                    "baseline_datasets_edit",
+                    "baseline_metrics_edit",
+                    "baseline_limitations_edit",
+                    "baseline_method_edit",
+                    "baseline_contributions_edit",
+                ):
+                    st.session_state.pop(field_key, None)
+                st.info("A different PDF was selected. Extract its metadata before comparing.")
+            st.session_state.baseline_pdf_signature = upload_signature
         if uploaded is not None and st.button("Extract baseline metadata", width="stretch", key="extract_baseline_button"):
             if uploaded.size > MAX_BASELINE_PDF_BYTES:
                 st.error("PDF exceeds the 20 MB limit. Please upload a smaller paper.")
@@ -401,17 +513,38 @@ def render_baseline_controls() -> None:
                     pdf_bytes = uploaded.getvalue()
                     text = extract_baseline_pdf_text(pdf_bytes)
                     extracted = extract_baseline_metadata_with_llm(text) or extract_baseline_metadata(text)
+                    for field_key in (
+                        "baseline_model_edit",
+                        "baseline_datasets_edit",
+                        "baseline_metrics_edit",
+                        "baseline_limitations_edit",
+                        "baseline_method_edit",
+                        "baseline_contributions_edit",
+                    ):
+                        st.session_state.pop(field_key, None)
                     st.session_state.baseline_metadata = extracted
-                    st.success(
+                    message = (
                         f"Read up to {MAX_BASELINE_PDF_PAGES} pages ({len(text):,} characters). "
-                        f"{extracted.get('extraction_mode', 'Metadata extracted')}. Review and save the fields below."
+                        f"{extracted.get('extraction_mode', 'Metadata extracted')}. Review the fields below."
                     )
+                    evidence = extracted.get("extraction_evidence") or {}
+                    has_evidence = bool(
+                        evidence.get("model_name")
+                        or evidence.get("datasets_used")
+                        or evidence.get("reported_metrics")
+                        or evidence.get("key_limitations")
+                    )
+                    if has_evidence:
+                        st.success(message)
+                    else:
+                        st.warning(message + " No verifiable facts were extracted; enter them manually if needed.")
                 except MemoryError:
                     st.error("The PDF used more memory than available. Try a smaller or shorter paper.")
                 except Exception as error:
                     st.error(f"Could not read the PDF: {error}")
         baseline = st.session_state.get("baseline_metadata")
         if baseline:
+            st.caption(baseline.get("extraction_mode", "Review extracted fields before saving."))
             model_name = st.text_input("Baseline model", baseline.get("model_name", "Not identified"), key="baseline_model_edit")
             datasets = st.text_input("Baseline datasets (comma-separated)", ", ".join(baseline.get("datasets_used", [])), key="baseline_datasets_edit")
             metrics = st.text_area("Reported metrics JSON", json.dumps(baseline.get("reported_metrics", {}), indent=2), key="baseline_metrics_edit")
@@ -424,6 +557,17 @@ def render_baseline_controls() -> None:
                     st.success("Baseline metadata saved.")
                 except (TypeError, ValueError, json.JSONDecodeError) as error:
                     st.error(f"Metrics must be valid JSON: {error}")
+            evidence = baseline.get("extraction_evidence") or {}
+            evidence_items = []
+            if evidence.get("model_name"):
+                evidence_items.append(("Model", evidence["model_name"]))
+            evidence_items.extend(("Dataset", item) for item in evidence.get("datasets_used", []))
+            evidence_items.extend((f"Metric: {name}", quote) for name, quote in evidence.get("reported_metrics", {}).items())
+            evidence_items.extend(("Limitation", item) for item in evidence.get("key_limitations", []))
+            if evidence_items:
+                with st.expander("Check source quotes"):
+                    for label, quote in evidence_items:
+                        st.markdown(f"**{label}:** {quote}")
 
 
 def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
