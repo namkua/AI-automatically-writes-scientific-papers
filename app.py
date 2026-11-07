@@ -980,14 +980,40 @@ def render_benchmarks(research: dict[str, Any]) -> None:
     st.dataframe(display_frame(benchmark), use_container_width=True, hide_index=True)
     if HAS_PLOTLY:
         benchmark_chart = benchmark.copy()
-        benchmark_chart["role"] = benchmark_chart["role"].map({
-            "Baseline": "Baseline (Mô hình đối chứng)",
-            "Proposed": "Proposed Method (Phương pháp đề xuất)",
-        }).fillna(benchmark_chart["role"])
-        left, middle, right = st.columns(3)
-        left.plotly_chart(px.bar(benchmark_chart, x="model_name", y="primary_metric", color="role", title=f"Primary Metric (Chỉ số chính: {primary_metric})", labels={"model_name": "Model (Mô hình)", "primary_metric": f"Primary Metric ({primary_metric})", "role": "Role (Vai trò)"}, hover_data={"model_name": True, "role": True, "primary_metric": ":.4f"}, template="plotly_dark"), use_container_width=True)
-        middle.plotly_chart(px.bar(benchmark_chart, x="model_name", y="latency_ms", color="role", title="Latency (Thời gian xử lý, ms)", labels={"model_name": "Model (Mô hình)", "latency_ms": "Latency (Thời gian xử lý, ms)", "role": "Role (Vai trò)"}, hover_data={"model_name": True, "role": True, "latency_ms": ":.2f"}, template="plotly_dark"), use_container_width=True)
-        right.plotly_chart(px.bar(benchmark_chart, x="model_name", y="params_m", color="role", title="Parameters (Số tham số, triệu)", labels={"model_name": "Model (Mô hình)", "params_m": "Parameters (Số tham số, triệu)", "role": "Role (Vai trò)"}, hover_data={"model_name": True, "role": True, "params_m": ":.2f"}, template="plotly_dark"), use_container_width=True)
+        benchmark_chart["model_label"] = benchmark_chart["model_name"].map({
+            "nanoGPT Baseline": "nanoGPT Base",
+            "nanoGPT + QK-Norm": "+ QK-Norm",
+            "nanoGPT + Layer-wise LR": "+ Layer LR",
+        }).fillna(benchmark_chart["model_name"].str.slice(0, 24))
+        benchmark_chart["role"] = benchmark_chart["role"].map({"Baseline": "Baseline", "Proposed": "Proposed"}).fillna(benchmark_chart["role"])
+
+        metric_fig = px.bar(
+            benchmark_chart, x="model_label", y="primary_metric", color="role", title="Primary metric",
+            labels={"model_label": "Model", "primary_metric": primary_metric.split(" — ", 1)[0], "role": "Type"},
+            hover_data={"model_name": True, "primary_metric": ":.4f"}, template="plotly_dark",
+        )
+        latency_fig = px.bar(
+            benchmark_chart, x="model_label", y="latency_ms", color="role", title="Latency (ms)",
+            labels={"model_label": "Model", "latency_ms": "Latency (ms)", "role": "Type"},
+            hover_data={"model_name": True, "latency_ms": ":.2f"}, template="plotly_dark",
+        )
+        params_fig = px.bar(
+            benchmark_chart, x="model_label", y="params_m", color="role", title="Parameters (millions)",
+            labels={"model_label": "Model", "params_m": "Parameters (M)", "role": "Type"},
+            hover_data={"model_name": True, "params_m": ":.2f"}, template="plotly_dark",
+        )
+        for figure in (metric_fig, latency_fig, params_fig):
+            figure.update_layout(
+                height=360,
+                margin={"l": 55, "r": 20, "t": 55, "b": 65},
+                legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+            )
+            figure.update_xaxes(tickangle=-20, automargin=True)
+            figure.update_yaxes(automargin=True)
+        metric_column, latency_column = st.columns(2)
+        metric_column.plotly_chart(metric_fig, use_container_width=True)
+        latency_column.plotly_chart(latency_fig, use_container_width=True)
+        st.plotly_chart(params_fig, use_container_width=True)
     if research.get("ablation_study"):
         st.subheader("Thử nghiệm loại bỏ từng thành phần")
         ablation = pd.DataFrame(research["ablation_study"])
