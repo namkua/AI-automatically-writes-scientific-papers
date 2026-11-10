@@ -1106,6 +1106,34 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
     )
 
 
+def sanitize_math_placeholders(text: str) -> str:
+    """Thay thế chuỗi placeholder thô bằng LaTeX an toàn, không bịa số liệu cụ thể."""
+    replacements = [
+        (r"\[mathematical\s+formulation\]", r"\text{[công thức toán chưa được sinh]}"),
+        (r"\[mathematical\s+expression\]", r"\text{[biểu thức toán chưa được sinh]}"),
+        (r"\[insert\s+equation\]", r"\text{[công thức chưa được chèn]}"),
+        (r"\[formula\]", r"\text{[công thức toán]}"),
+    ]
+    value = text
+    for pattern, repl in replacements:
+        value = re.sub(pattern, repl, value, flags=re.IGNORECASE)
+    return value
+
+
+def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
+    """Áp dụng sanitize placeholder lên các trường văn bản của WriterOutput trước khi trả về UI."""
+    text_fields = (
+        "abstract", "introduction", "related_work", "methodology",
+        "experimental_results", "discussion", "conclusion",
+    )
+    data = writer.model_dump()
+    for field in text_fields:
+        value = data.get(field, "")
+        if isinstance(value, str):
+            data[field] = sanitize_math_placeholders(value)
+    return WriterOutput(**data)
+
+
 def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> WriterOutput:
     topic = plan.title.split(":")[0]
     proposed = next((model for model in research.models_compared if model.role == "Proposed"), research.models_compared[-1])
@@ -1153,7 +1181,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
         formulas[1] = r"\hat{y}_{t+h}=f_\theta(y_{t-L:t},x_{t-L:t}),\qquad \mathcal{L}_{forecast}=\frac{1}{N}\sum_{i=1}^{N}(y_i-\hat{y}_i)^2"
     elif plan.domain in {"Legal AI", "Natural Language Processing", "Natural Language Processing (NLP) / Machine Translation", "Natural Language Processing (NLP) / RAG"}:
         formulas[1] = r"P(y|x)=\mathrm{softmax}(W h_{[CLS]}+b),\qquad \mathcal{L}_{CE}=-\sum_{c=1}^{C}y_c\log P(y=c|x)"
-    return WriterOutput(
+    writer_result = WriterOutput(
         title=plan.title,
         abstract=(
             f"This paper presents a systematic investigation of {topic} within {plan.domain}. It introduces {proposed.name}, "
@@ -1388,6 +1416,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             f"{plan.domain} Research Benchmark Collection (2026). Curated evaluation protocol.",
         ],
     )
+    return sanitize_writer_output(writer_result)
 
 
 def _build_dynamic_reviewer(paper: WriterOutput, research: ResearcherOutput) -> ReviewerOutput:
