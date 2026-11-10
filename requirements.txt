@@ -1,6 +1,12 @@
+# Build & Packaging (prevents legacy distutils build errors on Python 3.12+)
+setuptools>=68.0
+wheel
+
 # LLM APIs
 anthropic
-aider-chat
+# aider-chat pins exact transitive versions that force pip to backtrack to legacy numpy (<1.26) on Python 3.12+;
+# install separately if needed: pip install aider-chat (or uv tool install aider-chat)
+# aider-chat
 backoff
 openai
 google-genai
@@ -11,7 +17,6 @@ requests>=2.31
 streamlit>=1.36
 pandas>=2.0
 plotly>=5.20
-streamlit-extras>=1.6
 reportlab>=4.0
 # Viz
 matplotlib
@@ -21,7 +26,7 @@ PyMuPDF>=1.24
 # Common Requirements
 torch
 torchvision
-numpy
+numpy>=1.26.0
 transformers
 datasets
 einops
@@ -37,7 +42,8 @@ pyalex
 peft
 accelerate
 timm
-gymnasium
-stable-baselines3
-librosa
-speechbrain
+# Optional domain libraries (uncomment in Python 3.11 environments if needed):
+# gymnasium
+# stable-baselines3
+# librosa
+# speechbrain

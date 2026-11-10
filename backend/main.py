@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv(override=True)
 
 from backend.schemas import (
     AblationRow,
@@ -654,26 +657,61 @@ def _make_model_catalog(topic: str, domain: str | None) -> list[ModelSpec]:
     return models
 
 
-def _safe_live_call(api_key: str | None, prompt: str) -> Any | None:
+_EXHAUSTED_MODELS: set[str] = set()
+
+
+def _parse_json_lenient(raw_text: str) -> Any:
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.DOTALL).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        fixed = re.sub(r'\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})', r"\\\\", cleaned)
+        return json.loads(fixed)
+
+
+def _safe_live_call(api_key: str | None, prompt: str, response_schema: Any | None = None) -> Any | None:
     if not api_key:
         return None
     try:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.3, response_mime_type="application/json"),
+        preferred_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        fallback_chain = (
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
         )
-        try:
-            return json.loads(response.text)
-        except Exception:
-            text = getattr(response, "text", None)
-            if text:
-                return json.loads(text)
-            return None
+        candidates = [preferred_model] + [m for m in fallback_chain if m != preferred_model]
+        active_candidates = [m for m in candidates if m not in _EXHAUSTED_MODELS] or candidates
+        client = genai.Client(api_key=api_key)
+        for model_name in active_candidates:
+            try:
+                cfg_kwargs: dict[str, Any] = {
+                    "temperature": 0.3,
+                    "response_mime_type": "application/json",
+                }
+                if response_schema is not None:
+                    cfg_kwargs["response_schema"] = response_schema
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(**cfg_kwargs),
+                )
+                text = getattr(response, "text", None)
+                if text:
+                    return _parse_json_lenient(text)
+            except Exception as err:
+                err_str = str(err)
+                if any(code in err_str for code in ("NOT_FOUND", "404", "RESOURCE_EXHAUSTED", "429", "UNAVAILABLE", "503")):
+                    _EXHAUSTED_MODELS.add(model_name)
+                    continue
+                continue
+        return None
     except Exception:
         return None
 
@@ -988,9 +1026,9 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             "$$Q=XW_Q,\\qquad K=XW_K,\\qquad V=XW_V.$$ \n"
             "For head h, the proposed gate is\n"
             "$$g_h=\\sigma(W_g\\,\\mathrm{MeanPool}(X)+U_g q+b_g),\\qquad 0\\leq g_h\\leq1.$$ \n"
-            "The gated representation is \(Z=\\sum_i g_i h_i\), with a residual path retained for stability. The joint training objective is\n"
+            "The gated representation is \\(Z=\\sum_i g_i h_i\\), with a residual path retained for stability. The joint training objective is\n"
             "$$L_{total}=L_{task}+\\lambda_s\\lVert g\\rVert_1+\\lambda_cL_{consistency}+\\lambda_uL_{uncertainty}.$$ \n"
-            "Here \(L_{task}\) measures the target objective, \(L_{consistency}\) compares clean and perturbed views, and \(L_{uncertainty}\) penalizes miscalibration.\n\n"
+            "Here \\(L_{task}\\) measures the target objective, \\(L_{consistency}\\) compares clean and perturbed views, and \\(L_{uncertainty}\\) penalizes miscalibration.\n\n"
             "### 3.3 Algorithm and complexity\n"
             "The forward pass is: (1) encode inputs; (2) pool contextual features; (3) compute gates; (4) retain or down-weight components; (5) execute the task head; (6) emit prediction and uncertainty. "
             "A dense implementation remains O(N^2) in attention interactions. A pruned implementation may reduce active interactions, but the exact bound depends on the selection algorithm; therefore this paper reports measured FLOPs and memory rather than claiming O(N log N) without proof. "
@@ -1070,7 +1108,28 @@ def _build_dynamic_reviewer(paper: WriterOutput, research: ResearcherOutput) -> 
     )
 
 
-def _answer_paper_question(question: str, paper: WriterOutput, research: ResearcherOutput) -> str:
+def _answer_paper_question(question: str, paper: WriterOutput, research: ResearcherOutput, api_key: str | None = None) -> str:
+    key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if key:
+        try:
+            qa_prompt = (
+                "You are the Research Assistant for the following scientific manuscript. "
+                "Answer the user's question accurately, concisely, and in the SAME language as the question (Vietnamese or English). "
+                "Base your answer strictly on the manuscript and benchmark data below; note when figures are Controlled Planning Simulation Estimates. "
+                'Return valid JSON: {"answer": "your response"}.\n\n'
+                f"Title: {paper.title}\n"
+                f"Abstract: {paper.abstract}\n"
+                f"Methodology: {paper.methodology[:2000]}\n"
+                f"Experimental Results: {paper.experimental_results[:2000]}\n"
+                f"Benchmarks: {json.dumps([row.model_dump() for row in research.benchmark_table])}\n"
+                f"Ablations: {json.dumps([row.model_dump() for row in research.ablation_study])}\n"
+                f"Question: {question}"
+            )
+            payload = _safe_live_call(key, qa_prompt)
+            if isinstance(payload, dict) and isinstance(payload.get("answer"), str) and payload["answer"].strip():
+                return payload["answer"].strip()
+        except Exception:
+            pass
     normalized = question.strip().lower()
     proposed = next((model for model in research.models_compared if model.role == "Proposed"), None)
     baselines = [model for model in research.models_compared if model.role == "Baseline"]
@@ -1102,29 +1161,78 @@ def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, cons
     try:
         prompt = (
             "Return only valid JSON matching this schema: "
-            "{title, domain, research_question, hypothesis, datasets_catalog:[{name, modality, sample_size, input_spec, primary_metric, description}], "
-            "models_catalog:[{name, role, backbone, params_m, flops_g, latency_ms, key_characteristic}], baseline_methods:[str], proposed_method:str, "
+            "{title:str, domain:str, research_question:str, hypothesis:str, "
+            "datasets_catalog:[{name:str, modality:str, sample_size:str, input_spec:str, primary_metric:str, description:str}], "
+            "models_catalog:[{name:str, role:'Baseline'|'Proposed', backbone:str, params_m:float, flops_g:float, latency_ms:float, key_characteristic:str}], "
+            "baseline_methods:[str], proposed_method:str, "
             "evaluation_metrics:[str], experimental_plan:[str], report_outline:[str]}. "
+            "IMPORTANT: In models_catalog, include at least 2 items with role='Baseline' and 1 item with role='Proposed'. "
             "Generate one original proposed method, not a baseline-comparison paper. "
             f"Topic: {topic}; domain: {domain or 'AI research'}; objective: {objective or 'design a rigorous study'}; "
             f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets and flag any unavailable measurements as planned experiments."
         )
         payload = _safe_live_call(key, prompt)
-        if not payload:
+        if not isinstance(payload, dict):
             return None
+        for item in payload.get("models_catalog") or []:
+            if isinstance(item, dict) and isinstance(item.get("role"), str):
+                role_lower = item["role"].strip().lower()
+                item["role"] = "Proposed" if "propose" in role_lower or "ours" in role_lower else "Baseline"
         return PlannerOutput.model_validate(payload)
     except Exception:
         return None
+
+
+def _normalize_writer_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    aliases = {
+        "formulas": "mathematical_formulas",
+        "threats": "threats_to_validity",
+        "results": "experimental_results",
+    }
+    for source, target in aliases.items():
+        if target not in normalized and source in normalized:
+            normalized[target] = normalized[source]
+    str_fields = (
+        "title",
+        "abstract",
+        "introduction",
+        "related_work",
+        "methodology",
+        "experimental_results",
+        "discussion",
+        "conclusion",
+    )
+    list_fields = ("keywords", "mathematical_formulas", "threats_to_validity", "references")
+    for field in str_fields:
+        val = normalized.get(field)
+        if isinstance(val, dict):
+            normalized[field] = "\n\n".join(f"### {k}\n{v}" for k, v in val.items())
+        elif isinstance(val, list):
+            normalized[field] = "\n\n".join(str(x) for x in val)
+    for field in list_fields:
+        val = normalized.get(field)
+        if isinstance(val, str):
+            normalized[field] = [line.strip() for line in val.splitlines() if line.strip()] or [val]
+        elif isinstance(val, list):
+            items = []
+            for item in val:
+                if isinstance(item, dict):
+                    items.append(" - ".join(str(v) for v in item.values() if v))
+                else:
+                    items.append(str(item))
+            normalized[field] = items
+    return normalized
 
 
 def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key: str | None) -> WriterOutput | None:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
-    schema = "{title, abstract, keywords:[str], introduction, related_work, methodology, mathematical_formulas:[str], experimental_results, discussion, threats_to_validity:[str], conclusion, references:[str]}"
+    schema = "{title:str, abstract:str, keywords:[str], introduction:str, related_work:str, methodology:str, mathematical_formulas:[str], experimental_results:str, discussion:str, threats_to_validity:[str], conclusion:str, references:[str]}"
     prompt = (
         MASTER_RESEARCH_WRITER_PROMPT.format(sanitized_topic=sanitize_academic_topic(plan.title))
-        + "\nReturn only valid JSON matching this exact schema: " + schema + ". "
+        + "\nReturn only valid JSON matching this exact schema (all section fields MUST be plain markdown strings, not nested objects): " + schema + ". "
         "Use the supplied benchmark rows for quantitative comparisons, preserving their evidence_type. "
         "Do not upgrade Literature Baseline or Controlled Simulation into Measured. "
         f"Topic: {plan.title}. Domain: {plan.domain}. Research question: {plan.research_question}. "
@@ -1138,8 +1246,10 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         f"Knowledge Retrieval Precision: {research.knowledge_retrieval_precision}."
     )
     try:
-        payload = _safe_live_call(key, prompt)
-        return WriterOutput.model_validate(payload) if payload else None
+        payload = _safe_live_call(key, prompt, response_schema=WriterOutput)
+        if not isinstance(payload, dict):
+            return None
+        return WriterOutput.model_validate(_normalize_writer_payload(payload))
     except Exception:
         return None
 
