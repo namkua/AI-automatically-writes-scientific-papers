@@ -1,16 +1,15 @@
-name: ConvNeur Smoke Test & CI
+name: Application and ConvNeur CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
-  smoke-test:
-    name: Model & Pipeline Smoke Test
+  research-pipeline:
+    name: Research pipeline checks
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -18,28 +17,54 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
+      - name: Install core dependencies
+        run: python -m pip install -r requirements.txt
 
-      - name: Verify repository structure & git tracking
+      - name: Compile application modules
+        run: python -m py_compile app.py backend/main.py backend/schemas.py backend/guardrail_agent.py academic_sanitizer.py chart_generator.py
+
+      - name: Verify repository structure and git tracking
         run: |
-          # Verify binary dataset files are NOT tracked in git
           if git ls-files | grep -E '^data/.*\.(pt|tar\.gz)$'; then
             echo "ERROR: Binary dataset files found in git tracking!"
             exit 1
           fi
-          echo "Verified: No large binary datasets tracked in git."
 
-      - name: Run ConvNeur Smoke Test
-        run: |
-          python templates/convneur/smoke_test.py
+      - name: Run fallback stress pipeline
+        env:
+          GEMINI_API_KEY: ""
+          GOOGLE_API_KEY: ""
+        run: python test_pipeline_stress.py
 
-      - name: Run PyTest Suite
-        run: |
-          pytest tests/test_convneur_smoke.py -v
+      - name: Run adversarial topic pipeline
+        env:
+          GEMINI_API_KEY: ""
+          GOOGLE_API_KEY: ""
+        run: python test_adversarial_topics.py
+
+  convneur-smoke:
+    name: ConvNeur model smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install smoke-test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run ConvNeur smoke test
+        run: python templates/convneur/smoke_test.py
+
+      - name: Run ConvNeur pytest wrapper
+        run: python -m pytest tests/test_convneur_smoke.py -v

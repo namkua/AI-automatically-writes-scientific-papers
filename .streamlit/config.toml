@@ -1,2 +1,5 @@
 [logger]
 hideWelcomeMessage = true
+
+[server]
+maxUploadSize = 20

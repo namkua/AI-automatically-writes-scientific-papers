@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import hashlib
+import hmac
 import math
 import os
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 from backend.schemas import (
     AblationRow,
@@ -140,13 +145,79 @@ app = FastAPI(
     description="Multi-agent research pipeline with live Gemini integration and topic-aware fallback generation.",
 )
 
+def _cors_origins() -> list[str]:
+    configured = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    origins = [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
+    if not origins:
+        origins = ["http://localhost:8501", "http://127.0.0.1:8501"]
+    if "*" in origins:
+        raise RuntimeError("CORS_ALLOWED_ORIGINS must list explicit origins; wildcard origins are disabled.")
+    return origins
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
+
+try:
+    _RATE_LIMIT_PER_MINUTE = max(1, int(os.getenv("API_RATE_LIMIT_PER_MINUTE", "10")))
+except ValueError:
+    _RATE_LIMIT_PER_MINUTE = 10
+_RATE_LIMIT_WINDOW_SECONDS = 60.0
+_RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
+_RATE_LIMIT_LOCK = threading.Lock()
+
+
+@app.middleware("http")
+async def protect_api(request: Request, call_next):
+    """Require a shared API key remotely and apply a per-client in-memory limit.
+
+    Without SMART_RESEARCH_API_KEY, only loopback clients can use API routes,
+    preserving the default local Streamlit setup. Set a key for any deployment
+    behind a proxy or reachable from another machine.
+    """
+    if request.url.path == "/health" or request.method == "OPTIONS":
+        return await call_next(request)
+
+    client_host = request.client.host if request.client else "unknown"
+    expected_key = os.getenv("SMART_RESEARCH_API_KEY", "").strip()
+    if expected_key:
+        supplied_key = request.headers.get("X-API-Key", "")
+        if not hmac.compare_digest(supplied_key.encode("utf-8"), expected_key.encode("utf-8")):
+            return JSONResponse(status_code=401, content={"detail": "A valid X-API-Key header is required."})
+    else:
+        try:
+            is_loopback = ipaddress.ip_address(client_host).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Remote API access requires SMART_RESEARCH_API_KEY to be configured."},
+            )
+
+    now = time.monotonic()
+    with _RATE_LIMIT_LOCK:
+        if client_host not in _RATE_LIMIT_BUCKETS and len(_RATE_LIMIT_BUCKETS) >= 4096:
+            expired = [
+                host for host, stamps in _RATE_LIMIT_BUCKETS.items()
+                if not stamps or now - stamps[-1] >= _RATE_LIMIT_WINDOW_SECONDS
+            ]
+            for host in expired:
+                _RATE_LIMIT_BUCKETS.pop(host, None)
+            if len(_RATE_LIMIT_BUCKETS) >= 4096:
+                return JSONResponse(status_code=429, content={"detail": "API rate limiter is at capacity; retry shortly."})
+
+        bucket = _RATE_LIMIT_BUCKETS.setdefault(client_host, [])
+        bucket[:] = [stamp for stamp in bucket if now - stamp < _RATE_LIMIT_WINDOW_SECONDS]
+        if len(bucket) >= _RATE_LIMIT_PER_MINUTE:
+            return JSONResponse(status_code=429, content={"detail": "API request limit exceeded; retry shortly."})
+        bucket.append(now)
+    return await call_next(request)
 
 
 PTIT_COURSE_METADATA = {

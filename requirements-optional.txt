@@ -1,0 +1,31 @@
+# Optional live LLM providers and integrations.
+anthropic
+openai
+backoff
+google-generativeai
+pyalex
+
+# Optional model and dataset experimentation stack.
+torch
+torchvision
+transformers
+datasets
+einops
+einx
+tensordict
+tiktoken
+wandb
+tqdm
+peft
+accelerate
+timm
+gymnasium
+stable-baselines3
+librosa
+speechbrain
+
+# Optional app/export utilities.
+aider-chat
+streamlit-extras>=1.6
+pypdf
+pymupdf4llm
