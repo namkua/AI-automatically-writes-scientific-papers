@@ -67,7 +67,12 @@ WRITING AND EVIDENCE PRINCIPLES:
 4. Abstract hygiene: write one 150-250 word paragraph, use each sentence once,
    and do not repeat an evaluation disclaimer or summary clause.
 5. Target approximately 3,000+ words of dense, specific academic prose when
-   the provider budget permits. Explain structural choices, DRAM/SRAM
+   the provider budget permits; aim for 3,000–3,500 words across the existing
+   WriterOutput fields and preserve the same top-level manuscript sections.
+   Expand methodological rationale, related-work contrasts, protocol,
+   per-result interpretation, error analysis, reproducibility details, and
+   limitations. Do not meet the target by repeating claims or adding
+   unsupported results. Explain structural choices, DRAM/SRAM
    bandwidth, KV-cache or document-context memory, multimodal token
    alignment, memory movement, kernel overhead, and empirical behavior.
    Never pad with repeated claims or generic praise.
@@ -304,6 +309,31 @@ def _ensure_gap_and_proposal_sections(paper: WriterOutput, plan: PlannerOutput) 
     paper.related_work = related_work
     paper.methodology = methodology
     return paper
+
+
+def _metric_is_lower_better(metric_name: str) -> bool:
+    """Return whether smaller values represent better task performance."""
+    metric = metric_name.casefold()
+    return re.search(
+        r"(?:^|[^a-z])(?:loss|error|wer|cer|perplexity|ppl|latency|runtime|mae|mse|rmse|nll|memory|vram|eer|fpr|fnr)(?:$|[^a-z])",
+        metric,
+    ) is not None
+
+
+def _best_baseline_row(rows: list[Any], metric_name: str) -> Any | None:
+    if not rows:
+        return None
+    return (min if _metric_is_lower_better(metric_name) else max)(rows, key=lambda row: row.primary_metric)
+
+
+def _relative_metric_change(proposed: float, baseline: float, metric_name: str) -> float:
+    """Positive means improvement, regardless of the metric's direction."""
+    raw = _metric_improvement_delta(proposed, baseline, metric_name)
+    return raw / max(abs(baseline), 1e-9) * 100
+
+
+def _metric_improvement_delta(proposed: float, baseline: float, metric_name: str) -> float:
+    return (baseline - proposed) if _metric_is_lower_better(metric_name) else (proposed - baseline)
 
 
 def _validate_research_contract(plan: PlannerOutput, research: ResearcherOutput) -> None:
@@ -825,7 +855,12 @@ def _dataset_source(name: str) -> str:
     return sources.get(name, "https://huggingface.co/datasets")
 
 
-def _make_ablation_study(plan: PlannerOutput, proposed_score: float, proposed_latency: float) -> list[AblationSpec]:
+def _make_ablation_study(
+    plan: PlannerOutput,
+    proposed_score: float,
+    proposed_latency: float,
+    lower_is_better: bool = False,
+) -> list[AblationSpec]:
     domain = plan.domain
     components = {
         "Natural Language Processing (NLP) / RAG": ["Confidence-aware decoding", "Retrieved evidence attribution", "Claim-level verifier"],
@@ -837,7 +872,11 @@ def _make_ablation_study(plan: PlannerOutput, proposed_score: float, proposed_la
     rows = [AblationSpec(configuration="Full proposed model", removed_component="None", primary_metric=round(proposed_score, 4), latency_ms=round(proposed_latency, 2), delta_vs_full=0.0, interpretation="Reference configuration retaining all proposed components.")]
     for index, component in enumerate(components):
         drop = 0.018 + index * 0.012
-        rows.append(AblationSpec(configuration=f"Without {component}", removed_component=component, primary_metric=round(max(0.0, proposed_score - drop), 4), latency_ms=round(max(0.1, proposed_latency - (index + 1) * 0.8), 2), delta_vs_full=round(-drop, 4), interpretation=f"Removing {component.lower()} lowers the planned primary metric; verify this effect across independent seeds."))
+        direction = 1 if lower_is_better else -1
+        ablated_score = max(0.0, proposed_score + direction * drop)
+        delta = ablated_score - proposed_score
+        effect = "increases the planned error" if lower_is_better else "lowers the planned score"
+        rows.append(AblationSpec(configuration=f"Without {component}", removed_component=component, primary_metric=round(ablated_score, 4), latency_ms=round(max(0.1, proposed_latency - (index + 1) * 0.8), 2), delta_vs_full=round(delta, 4), interpretation=f"Removing {component.lower()} {effect}; verify this effect across independent seeds."))
     return rows
 
 
@@ -875,17 +914,31 @@ def _build_dynamic_research(plan: PlannerOutput) -> ResearcherOutput:
             )
     for dataset in plan.datasets_catalog:
         dataset.source_url = _dataset_source(dataset.name)
-    baseline_reference = max(curve.baseline_score for curve in curves if curve.dataset_name == dataset_names[0])
-    proposed_reference = max(curve.proposed_score for curve in curves if curve.dataset_name == dataset_names[0])
-    ablation_study = _make_ablation_study(plan, proposed_reference, next(model.latency_ms for model in plan.models_catalog if model.role == "Proposed"))
-    improvement = (proposed_reference - baseline_reference) / max(baseline_reference, 1e-9)
+    metric_name = plan.datasets_catalog[0].primary_metric if plan.datasets_catalog else "task score"
+    lower_is_better = _metric_is_lower_better(metric_name)
+    baseline_curve_score = max(curve.baseline_score for curve in curves if curve.dataset_name == dataset_names[0])
+    proposed_curve_score = max(curve.proposed_score for curve in curves if curve.dataset_name == dataset_names[0])
+    if lower_is_better:
+        baseline_reference = 1.0 - baseline_curve_score
+        proposed_reference = 1.0 - proposed_curve_score
+        improvement = (baseline_reference - proposed_reference) / max(baseline_reference, 1e-9)
+    else:
+        baseline_reference = baseline_curve_score
+        proposed_reference = proposed_curve_score
+        improvement = (proposed_reference - baseline_reference) / max(baseline_reference, 1e-9)
+    ablation_study = _make_ablation_study(
+        plan,
+        proposed_reference,
+        next(model.latency_ms for model in plan.models_catalog if model.role == "Proposed"),
+        lower_is_better=lower_is_better,
+    )
     proposed_scale = 1.0 + float(np.clip(improvement, 0.05, 0.12))
     benchmark_table = [
         AblationRow(
             model_name=model.name,
             dataset_name=dataset_names[0],
             role=model.role,
-            primary_metric=round(baseline_reference if model.role == "Baseline" else min(0.98, baseline_reference * proposed_scale), 4),
+            primary_metric=round(baseline_reference if model.role == "Baseline" else max(0.0, proposed_reference) if lower_is_better else min(0.98, baseline_reference * proposed_scale), 4),
             secondary_metric=round(max(0.0, baseline_reference - 0.08) if model.role == "Baseline" else min(0.98, (baseline_reference - 0.08) * proposed_scale), 4),
             latency_ms=model.latency_ms,
             params_m=model.params_m,
@@ -897,7 +950,7 @@ def _build_dynamic_research(plan: PlannerOutput) -> ResearcherOutput:
         for model in plan.models_catalog
     ]
     key_findings = [
-        f"The proposed design for {topic_tokens} improves the simulated {plan.evaluation_metrics[0]} by {max(5.0, improvement * 100):.1f}% over the strongest baseline.",
+        f"The proposed design for {topic_tokens} shows a simulated {('improvement' if improvement >= 0 else 'degradation')} of {abs(improvement * 100):.1f}% on {metric_name} over the strongest baseline.",
         f"The generated curves show decreasing loss and increasing {plan.evaluation_metrics[0]} across {len(epochs)} epochs.",
         f"Reasoning consistency is {plan.inference_engine.routing_confidence:.2f} and knowledge retrieval precision is {min(0.98, plan.inference_engine.routing_confidence + 0.02):.2f} under the controlled routing audit.",
         "Ablation results are designed to test whether the proposed signal selection contributes beyond a simple capacity increase.",
@@ -931,8 +984,11 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
     proposed_rows = [row for row in research.benchmark_table if row.role == "Proposed"]
     baseline_rows = [row for row in research.benchmark_table if row.role == "Baseline"]
     proposed_score = proposed_rows[0].primary_metric if proposed_rows else 0.88
-    baseline_score = max((row.primary_metric for row in baseline_rows), default=0.82)
-    gain = (proposed_score - baseline_score) / max(baseline_score, 1e-9) * 100
+    metric_name = research.datasets_used[0].primary_metric if research.datasets_used else "task score"
+    best_baseline = _best_baseline_row(baseline_rows, metric_name)
+    baseline_score = best_baseline.primary_metric if best_baseline else 0.82
+    gain = _relative_metric_change(proposed_score, baseline_score, metric_name)
+    gain_label = "relative improvement" if gain >= 0 else "relative degradation"
     baseline_latency = min((model.latency_ms for model in baselines), default=40.0)
     average_latency = sum(model.latency_ms for model in baselines) / max(len(baselines), 1)
     dataset_names = ", ".join(dataset.name for dataset in research.datasets_used)
@@ -965,7 +1021,7 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
         abstract=(f"This paper presents a systematic investigation of {topic_title} in the context of {plan.domain}. It frames the system as a knowledge-based reasoning architecture with an explicit inference engine and expert-agent coordination protocol. "
                   f"The study evaluates {proposed.name}, a {proposed.backbone} proposed to improve task-relevant signal selection, against {len(baselines)} representative baselines: {model_names}. "
                   f"Evaluation covers {len(research.datasets_used)} complementary datasets ({dataset_names}) and reports predictive quality, robustness, parameter count, and inference latency. "
-                  f"The proposed configuration reaches a primary score of {proposed_score:.2f}, compared with the strongest baseline score of {baseline_score:.2f}, corresponding to a relative improvement of {gain:.1f}%. "
+                  f"The proposed configuration reaches a primary score of {proposed_score:.2f}, compared with the strongest baseline score of {baseline_score:.2f}, corresponding to a {gain_label} of {abs(gain):.1f}%. "
                   f"It uses {proposed.params_m:.1f}M parameters and incurs {proposed.latency_ms:.1f} ms latency, making the quality-efficiency trade-off explicit rather than treating accuracy as the only objective. "
                   "The results support the hypothesis that domain-aware architectural choices can improve generalization and operational reliability without requiring unbounded model scaling. The paper further documents limitations, reproducibility assumptions, and directions for external validation. In particular, the catalog makes the claim auditable: each reported improvement is tied to a named dataset, an explicit comparator, and a measurable resource budget. This framing is useful for researchers who need to decide whether a modest quality gain justifies additional deployment complexity. The contribution is methodological as well as architectural: it defines a repeatable evidence contract in which predictive utility, convergence behavior, and deployment cost are analyzed jointly rather than reported as disconnected headline numbers."),
         keywords=[plan.domain.lower(), "optimization", "robustness", "benchmark", "research pipeline"],
@@ -974,7 +1030,7 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
                       f"The present study frames the central question as follows: {plan.research_question} "
                       f"Our hypothesis is that {plan.hypothesis} The design therefore treats dataset diversity and efficiency as first-class experimental variables rather than post-hoc commentary.\n\n"
                       f"We make three contributions. First, we define a topic-aware experimental protocol spanning {len(research.datasets_used)} datasets and {len(research.models_compared)} model configurations. Second, we report a reproducible comparison between baseline systems and {proposed.name}, including primary score, secondary score, parameters, latency, and convergence behavior. Third, we provide a structured analysis of where the gains originate and where they may not generalize. "
-                      f"The proposed system improves the primary benchmark from {baseline_score:.2f} to {proposed_score:.2f} ({gain:.1f}% relative), while its {proposed.latency_ms:.1f} ms latency remains close to the baseline range of {baseline_latency:.1f}-{average_latency:.1f} ms. These results establish a measurable starting point for deeper validation."),
+                      f"The proposed system changes the primary benchmark from {baseline_score:.2f} to {proposed_score:.2f} ({abs(gain):.1f}% {gain_label}), while its {proposed.latency_ms:.1f} ms latency remains close to the baseline range of {baseline_latency:.1f}-{average_latency:.1f} ms. These results establish a measurable starting point for deeper validation."),
         related_work=("Prior research in machine learning has followed three broad directions. The first develops increasingly expressive backbone architectures, including convolutional encoders, recurrent networks, graph message passing, and attention-based transformers. The second introduces domain priors so that models exploit structure that generic representation learning may overlook. The third studies robustness and efficiency through regularization, pruning, distillation, quantization, or adaptive computation. Each direction is valuable, but they are frequently evaluated in isolation.\n\n"
                       f"Our work is closest to task-aware adaptive modeling. Unlike a purely architecture-centric comparison, we evaluate {proposed.name} alongside {model_names} under the same reporting contract. This matters because a model with a larger score can still be unattractive when its latency or parameter budget grows disproportionately. We consequently use the utility formulation reported in the paper to keep quality and cost visible together.\n\n"
                       "The distinction from prior benchmark-only studies is methodological: we treat the catalog as a compact experimental matrix that can be regenerated for a new topic, while preserving common evidence requirements. The approach does not claim that one architecture dominates every domain. Instead, it offers a disciplined mechanism for testing whether a proposed inductive bias contributes beyond capacity, and for identifying the additional data, statistical tests, or deployment trials needed before making a stronger claim."),
@@ -983,7 +1039,7 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
                       f"The experimental protocol uses {len(research.datasets_used)} datasets and compares {len(research.models_compared)} models: {model_names}. Each configuration is evaluated with the same split policy, optimization schedule, stopping criterion, and measurement interface. We record the primary and secondary metrics, training curves, parameter count, FLOPs, latency, and qualitative notes. The benchmark matrix is anchored on {research.benchmark_table[0].dataset_name if research.benchmark_table else 'the primary dataset'} so that the ablation comparison remains directly interpretable.\n\n"
                       f"For reproducibility, the reference hardware is {research.hardware_setup}. The proposed system contains {proposed.params_m:.1f}M parameters, requires {proposed.flops_g:.1f} GFLOPs per inference, and records {proposed.latency_ms:.1f} ms latency in the generated estimate. These values are not presented as universal measurements; they are controlled planning values that should be replaced by instrumented runs before publication. This distinction keeps the generated manuscript useful for planning while making its evidence boundary explicit. Optimization follows a constrained empirical protocol: the learning rate is annealed, early stopping is tied to convergence stability rather than a single favorable epoch, and each reported gain is interpreted alongside parameter and latency budgets. This design distinguishes an inductive-bias contribution from a superficial increase in capacity."),
         mathematical_formulas=formulas,
-        experimental_results=(f"Across the generated benchmark matrix, {proposed.name} obtains a primary metric of {proposed_score:.2f}, whereas the strongest baseline reaches {baseline_score:.2f}. The absolute difference is {proposed_score - baseline_score:.2f}, equivalent to a {gain:.1f}% relative gain. The secondary metric changes from the baseline reference of {baseline_rows[0].secondary_metric if baseline_rows else 0.74:.2f} to {proposed_rows[0].secondary_metric if proposed_rows else 0.81:.2f}. These figures indicate a meaningful improvement under the controlled protocol, while the table should still be read as evidence for a research hypothesis rather than a substitute for repeated measurements.\n\n"
+        experimental_results=(f"Across the generated benchmark matrix, {proposed.name} obtains a primary metric of {proposed_score:.2f}, whereas the strongest baseline reaches {baseline_score:.2f}. The direction-aware improvement is {_metric_improvement_delta(proposed_score, baseline_score, metric):+.2f}, equivalent to a {gain:.1f}% relative change. The secondary metric changes from the same strongest baseline's {best_baseline.secondary_metric if best_baseline else 0.74:.2f} to {proposed_rows[0].secondary_metric if proposed_rows else 0.81:.2f}. These figures indicate a meaningful improvement under the controlled protocol, while the table should still be read as evidence for a research hypothesis rather than a substitute for repeated measurements.\n\n"
                        f"The result is also interpretable in terms of convergence dynamics. Over the 15-epoch simulated schedule, the proposed trajectory reduces optimization loss while increasing the primary score, with bounded perturbations that preserve a realistic rather than perfectly monotonic trace. A credible experimental narrative reports both central tendency and residual variance instead of presenting an artificially smooth curve as proof of generalization.\n\n"
                                f"The efficiency profile is equally important. {proposed.name} uses {proposed.params_m:.1f}M parameters and {proposed.flops_g:.1f} GFLOPs with an estimated latency of {proposed.latency_ms:.1f} ms. The baseline catalog spans {min(model.latency_ms for model in baselines):.1f}-{max(model.latency_ms for model in baselines):.1f} ms and {min(model.params_m for model in baselines):.1f}-{max(model.params_m for model in baselines):.1f}M parameters. Convergence traces show the proposed loss decreasing more rapidly, while its score rises from approximately 0.82 to 0.92 over ten epochs versus 0.85 for the baseline trajectory.\n\n"
                                f"The ablation rows suggest that the gain is not explained solely by adding parameters: {ablation_summary}. Component-level interpretation is also required: {ablation_explanation} The proposed configuration remains competitive on latency and improves both quality dimensions. A complete publication would extend this analysis with multiple random seeds, confidence intervals, calibration, subgroup performance, and a held-out external dataset. It should also record preprocessing time, peak memory, throughput at several batch sizes, and the operational threshold used to convert scores into decisions. Those measurements would determine whether the observed margin survives outside the controlled planning environment."),
@@ -997,7 +1053,7 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
             "Hardware validity: latency, memory, and throughput depend on accelerator, compiler, batch size, precision, and implementation details.",
             "Data validity: licensing, demographic bias, annotation noise, leakage, and temporal drift require dataset-specific audits before publication.",
         ],
-        conclusion=(f"This paper developed a structured study of {topic_title} for {plan.domain}. The proposed {proposed.name} reached {proposed_score:.2f} versus {baseline_score:.2f} for the strongest baseline, a relative improvement of {gain:.1f}%, while operating at {proposed.latency_ms:.1f} ms with {proposed.params_m:.1f}M parameters. The combined benchmark, convergence, and efficiency evidence supports the value of the proposed task-aware design under the stated assumptions.\n\n"
+        conclusion=(f"This paper developed a structured study of {topic_title} for {plan.domain}. The proposed {proposed.name} reached {proposed_score:.2f} versus {baseline_score:.2f} for the strongest baseline, a {gain_label} of {abs(gain):.1f}%, while operating at {proposed.latency_ms:.1f} ms with {proposed.params_m:.1f}M parameters. The combined benchmark, convergence, and efficiency evidence supports the value of the proposed task-aware design under the stated assumptions.\n\n"
                     "The conclusion is intentionally bounded. The current results are a rigorous planning artifact and a coherent fallback estimate, not a claim that replaces instrumented experimentation. Before submission, the study should validate all numbers on the named datasets, report uncertainty across independent runs, compare against current domain leaders, and document data governance. With those additions, the pipeline can evolve from a demonstration into a reproducible and auditable research system. The same protocol can then be transferred to new topics while preserving the separation between hypothesis generation, empirical verification, manuscript writing, and critical review. This separation is itself a contribution to dependable research automation because it makes assumptions visible and gives reviewers concrete checkpoints for challenging unsupported conclusions."),
         references=[
             "Vaswani, A., et al. (2017). Attention Is All You Need. NeurIPS.",
@@ -1017,7 +1073,14 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
     proposed = next((model for model in research.models_compared if model.role == "Proposed"), research.models_compared[-1])
     datasets = ", ".join(dataset.name for dataset in research.datasets_used)
     metric = research.datasets_used[0].primary_metric
-    proposed_score = next((row.primary_metric for row in research.benchmark_table if row.role == "Proposed"), 0.0)
+    proposed_row = next((row for row in research.benchmark_table if row.role == "Proposed"), None)
+    proposed_score = proposed_row.primary_metric if proposed_row else 0.0
+    metric = research.datasets_used[0].primary_metric if research.datasets_used else "task score"
+    baseline_rows = [row for row in research.benchmark_table if row.role == "Baseline"]
+    best_baseline = _best_baseline_row(baseline_rows, metric)
+    baseline_score = best_baseline.primary_metric if best_baseline else 0.0
+    gain = _relative_metric_change(proposed_score, baseline_score, metric)
+    gain_label = "relative improvement" if gain >= 0 else "relative degradation"
     ablation_explanation = " ".join(
         f"{row.configuration} changes the planned primary metric by {row.delta_vs_full:+.2f} "
         f"({abs(row.delta_vs_full) / max(proposed_score, 1e-9) * 100:.1f}%) because removing "
@@ -1025,6 +1088,12 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
         "This is a controlled planning estimate, not a measured effect."
         for row in research.ablation_study
         if row.removed_component != "None"
+    )
+    benchmark_comparison = "\n".join(
+        f"{row.model_name} ({row.role}): primary {row.primary_metric:.4f}, secondary {row.secondary_metric:.4f}, "
+        f"latency {row.latency_ms:.2f} ms, VRAM {row.vram_mb:.1f} MB, FLOPs {row.flops_g:.2f} G; "
+        f"evidence: {row.evidence_type}. {row.notes}"
+        for row in research.benchmark_table
     )
     return WriterOutput(
         title=plan.title,
@@ -1079,7 +1148,8 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             "Each dataset requires a declared split, preprocessing recipe, license, and leakage check.\n\n"
             "### 4.2 Main comparative evaluation\nThe benchmark matrix compares standard attention/backbone systems, efficient shared-computation systems, pruning or routing methods, and the proposed configuration. "
             "The comparison table must report the primary metric direction, latency per token or example, peak VRAM in MB, FLOPs in G, and evidence type. "
-            "The displayed values are planning estimates generated to make the experiment executable; they are not measured results.\n\n"
+            "The displayed values are planning estimates generated to make the experiment executable; they are not measured results. "
+            f"The row-level comparison is: {benchmark_comparison}\n\n"
             "### 4.3 Ablation study\nThe study removes the sparsity term, dynamic router, and uncertainty term independently. A valid ablation keeps data, optimizer, budget, and evaluation code fixed. "
             f"The generated ablation interpretation is: {ablation_explanation} The expected output is a matrix of mean, standard deviation, confidence interval, and evidence status rather than a single favorable run.\n\n"
             "### 4.4 Statistical protocol\nRun at least three independent seeds, report paired differences and 95% confidence intervals, and preserve raw logs. "
@@ -1147,7 +1217,8 @@ def _answer_paper_question(question: str, paper: WriterOutput, research: Researc
     baselines = [model for model in research.models_compared if model.role == "Baseline"]
     proposed_row = next((row for row in research.benchmark_table if row.role == "Proposed"), None)
     baseline_rows = [row for row in research.benchmark_table if row.role == "Baseline"]
-    strongest_baseline = max(baseline_rows, key=lambda row: row.primary_metric, default=None)
+    primary_metric = research.datasets_used[0].primary_metric if research.datasets_used else "task score"
+    strongest_baseline = _best_baseline_row(baseline_rows, primary_metric)
     if any(term in normalized for term in ("baseline", "compare", "comparison", "so sánh")):
         names = ", ".join(model.name for model in baselines)
         strongest = strongest_baseline.model_name if strongest_baseline else "the strongest baseline"
@@ -1161,8 +1232,9 @@ def _answer_paper_question(question: str, paper: WriterOutput, research: Researc
         return f"The proposed method is {proposed.name if proposed else 'the task-aware model'}. It uses {proposed.backbone.lower() if proposed else 'adaptive signal selection'} to emphasize topic-relevant evidence while tracking quality, robustness, parameters, and latency together."
     if any(term in normalized for term in ("result", "score", "improve", "performance", "kết quả")) and proposed_row:
         baseline_score = strongest_baseline.primary_metric if strongest_baseline else 0.0
-        gain = (proposed_row.primary_metric - baseline_score) / max(baseline_score, 1e-9) * 100
-        return f"The proposed system reaches {proposed_row.primary_metric:.2f} on the primary metric versus {baseline_score:.2f} for the strongest baseline, a simulated relative improvement of {gain:.1f}%. The result should be treated as a reproducible hypothesis until measured on real data."
+        gain = _relative_metric_change(proposed_row.primary_metric, baseline_score, primary_metric)
+        label = "relative improvement" if gain >= 0 else "relative degradation"
+        return f"The proposed system reaches {proposed_row.primary_metric:.2f} on the primary metric versus {baseline_score:.2f} for the strongest baseline, a simulated {label} of {abs(gain):.1f}%. The result should be treated as a reproducible hypothesis until measured on real data."
     return f"This paper studies {paper.title}. Its central claim is that a topic-aware design can improve the target task while keeping robustness and deployment cost visible. Ask about the baseline comparison, datasets, method, results, or limitations for a more specific answer."
 
 
@@ -1200,7 +1272,10 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         "Do not upgrade Literature Baseline or Controlled Simulation into Measured. "
         f"Topic: {plan.title}. Domain: {plan.domain}. Research question: {plan.research_question}. "
         f"Models: {json.dumps([item.model_dump() for item in plan.models_catalog])}. "
-        f"Datasets: {json.dumps([item.model_dump() for item in research.datasets_used])}. "
+        f"Datasets: {json.dumps([item.model_dump() for item in research.datasets_used], ensure_ascii=False)}. "
+        f"Benchmark rows (authoritative numeric evidence): {json.dumps([item.model_dump() for item in research.benchmark_table], ensure_ascii=False)}. "
+        f"Training-curve summary: {json.dumps([item.model_dump() for item in research.training_curves if item.epoch in {1, 5, 10, 15}], ensure_ascii=False)}. "
+        f"Hardware setup: {research.hardware_setup}. Key findings: {json.dumps(research.key_findings, ensure_ascii=False)}. "
         f"Knowledge Base: {json.dumps(plan.knowledge_base.model_dump())}. "
         f"Inference Engine: {json.dumps(plan.inference_engine.model_dump())}. "
         f"Multi-Agent Coordination: {json.dumps(plan.agent_coordination.model_dump())}. "
