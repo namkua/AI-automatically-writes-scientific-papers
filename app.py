@@ -117,6 +117,8 @@ div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock p
 .metric-card-title span{display:block;color:var(--muted)}
 .metric-card-value{color:#f8fbff;font-size:1.85rem;line-height:1.1;white-space:nowrap;overflow:visible}
 .metric-card-badge{align-self:flex-start;max-width:100%;padding:.28rem .58rem;border-radius:999px;background:#1a5449;color:#d9fff2;font-size:.78rem;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
+.metric-card-title{white-space:normal;overflow-wrap:anywhere;max-height:5rem;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical}
+.metric-card-value{white-space:normal;overflow-wrap:anywhere}
 @media (max-width: 760px){.block-container{width:calc(100% - 1rem);padding-left:.5rem;padding-right:.5rem}.hero h1{font-size:1.5rem}.stTabs [data-baseweb="tab"]{font-size:.78rem;padding:.35rem}.architecture-flow{gap:.35rem}.architecture-flow .flow-step{font-size:.82rem}}
 </style>""", unsafe_allow_html=True)
 
@@ -1404,12 +1406,17 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         import pymupdf as fitz
         document = fitz.open(stream=pdf, filetype="pdf")
         st.session_state["pdf_pages_images"] = []
+        max_preview_pages = min(document.page_count, 3)
         for page_number, page in enumerate(document, 1):
+            if page_number > max_preview_pages:
+                break
             pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
             page_image = pixmap.tobytes("png")
             st.session_state["pdf_pages_images"].append(page_image)
             st.image(page_image, use_container_width=True)
             st.caption(f"Trang {page_number}")
+        if document.page_count > max_preview_pages:
+            st.caption(f"Xem trước {max_preview_pages}/{document.page_count} trang. Tải file PDF bên dưới để xem toàn bộ.")
         document.close()
     except (ImportError, RuntimeError, ValueError) as error:
         st.warning(f"Không thể dựng ảnh xem trước PDF: {error}. Hãy tải file PDF bên dưới.")

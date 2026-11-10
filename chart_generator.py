@@ -23,15 +23,16 @@ def generate_research_charts(
                 rows[column] = 0.0
             rows[column] = pd.to_numeric(rows[column], errors="coerce").fillna(0)
         labels = rows["model_name"].astype(str).tolist()
+        short_labels = [label[:24] + ("…" if len(label) > 24 else "") for label in labels]
         figure, axes = plt.subplots(1, 2, figsize=(11, 4.8), constrained_layout=True)
-        axes[0].bar(labels, rows["latency_ms"], color="#2563eb")
+        axes[0].bar(short_labels, rows["latency_ms"], color="#2563eb")
         axes[0].set_title("Latency (ms) - lower is better")
         axes[0].set_ylabel("Milliseconds")
-        axes[1].bar(labels, rows["vram_mb"], color="#14b8a6")
+        axes[1].bar(short_labels, rows["vram_mb"], color="#14b8a6")
         axes[1].set_title("Peak VRAM (MB) - lower is better")
         axes[1].set_ylabel("MB")
         for axis in axes:
-            axis.tick_params(axis="x", labelrotation=28)
+            axis.tick_params(axis="x", labelrotation=28, labelsize=8)
             axis.grid(axis="y", alpha=0.25)
         path = destination / "benchmark_efficiency.png"
         figure.savefig(path, dpi=300, bbox_inches="tight")
@@ -40,6 +41,8 @@ def generate_research_charts(
 
     ablations = pd.DataFrame(research.get("ablation_study", []))
     if not ablations.empty:
+        ablations["configuration"] = ablations["configuration"].astype(str).str.slice(0, 24)
+        ablations["removed_component"] = ablations["removed_component"].astype(str).str.slice(0, 24)
         figure, axis = plt.subplots(figsize=(7.5, 4.5), constrained_layout=True)
         axis.plot(
             ablations["configuration"],
@@ -50,7 +53,7 @@ def generate_research_charts(
         )
         axis.set_title("Ablation trade-off")
         axis.set_ylabel("Primary metric")
-        axis.tick_params(axis="x", labelrotation=28)
+        axis.tick_params(axis="x", labelrotation=28, labelsize=8)
         axis.grid(alpha=0.25)
         axis.legend()
         path = destination / "ablation_tradeoff.png"
