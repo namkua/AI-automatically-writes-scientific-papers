@@ -1472,8 +1472,22 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         st.warning(f"Không thể dựng ảnh xem trước PDF: {error}. Hãy tải file PDF bên dưới.")
     st.divider()
     st.subheader("💬 Hỏi về bài báo")
+    sample_prompts = [
+        ("📌", "What is this paper about?"),
+        ("💡", "What is the main idea?"),
+        ("📊", "What are the main results?"),
+        ("❓", "What is the problem solved?"),
+    ]
+    sample_cols = st.columns(4)
+    for idx, (emoji, prompt_text) in enumerate(sample_prompts):
+        with sample_cols[idx]:
+            if st.button(f"{emoji} {prompt_text}", key=f"sample_q_{idx}", use_container_width=True):
+                st.session_state["pending_sample_question"] = prompt_text
+    if "pending_sample_question" in st.session_state:
+        st.session_state["paper_question"] = st.session_state.pop("pending_sample_question")
     question = st.text_input("Đặt câu hỏi về bài báo", placeholder="Ví dụ: Bài báo so sánh với baseline nào?", key="paper_question")
-    if question.strip():
+    if question.strip() and st.session_state.get("paper_question_answered") != question:
+        st.session_state["paper_question_answered"] = question
         with st.spinner("Đang phân tích bản thảo..."):
             answer = answer_paper_question(question, paper, research)
         st.markdown(f"<div class='chat-response'><strong>Research Assistant</strong><br>{escape(answer)}</div>", unsafe_allow_html=True)
