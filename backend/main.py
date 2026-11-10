@@ -1139,6 +1139,34 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
     )
 
 
+def sanitize_math_placeholders(text: str) -> str:
+    """Thay thế chuỗi placeholder thô bằng LaTeX an toàn, không bịa số liệu cụ thể."""
+    replacements = [
+        (r"\[mathematical\s+formulation\]", r"\text{[công thức toán chưa được sinh]}"),
+        (r"\[mathematical\s+expression\]", r"\text{[biểu thức toán chưa được sinh]}"),
+        (r"\[insert\s+equation\]", r"\text{[công thức chưa được chèn]}"),
+        (r"\[formula\]", r"\text{[công thức toán]}"),
+    ]
+    value = text
+    for pattern, repl in replacements:
+        value = re.sub(pattern, repl, value, flags=re.IGNORECASE)
+    return value
+
+
+def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
+    """Áp dụng sanitize placeholder lên các trường văn bản của WriterOutput trước khi trả về UI."""
+    text_fields = (
+        "abstract", "introduction", "related_work", "methodology",
+        "experimental_results", "discussion", "conclusion",
+    )
+    data = writer.model_dump()
+    for field in text_fields:
+        value = data.get(field, "")
+        if isinstance(value, str):
+            data[field] = sanitize_math_placeholders(value)
+    return WriterOutput(**data)
+
+
 def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> WriterOutput:
     topic = plan.title.split(":")[0]
     proposed = next((model for model in research.models_compared if model.role == "Proposed"), research.models_compared[-1])
@@ -1190,7 +1218,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
     elif plan.domain in {"Legal AI", "Natural Language Processing", "Natural Language Processing (NLP) / Machine Translation", "Natural Language Processing (NLP) / RAG"}:
         formulas[1] = r"P(y|x)=\operatorname{softmax}(W h_{[CLS]}+b),\qquad \mathcal{L}_{CE}=-\sum_{c=1}^{C}y_c\log P(y=c|x)"
 
-    return WriterOutput(
+    writer_result = WriterOutput(
         title=plan.title,
         abstract=(
             f"This paper presents a systematic, evidence-driven investigation of {topic} within modern {plan.domain}. "
@@ -1509,6 +1537,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             f"{plan.domain} Research Benchmark Consortium (2026). Standardized Benchmark Protocols and Verification Metrics for Intelligent Systems. Technical Report SRL-2026-TR-01.",
         ],
     )
+    return sanitize_writer_output(writer_result)
 
 
 def _build_dynamic_reviewer(paper: WriterOutput, research: ResearcherOutput) -> ReviewerOutput:
@@ -1630,6 +1659,7 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     _validate_research_contract(plan, research)
     live_paper = _maybe_live_writer(plan, research, api_key)
     paper = live_paper or _build_synthesis_writer(plan, research)
+    paper = sanitize_writer_output(paper)
     paper = _ensure_gap_and_proposal_sections(paper, plan)
     paper.abstract = _academic_abstract(paper.abstract)
     paper.mathematical_formulas = paper.mathematical_formulas[:4]
