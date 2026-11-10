@@ -137,6 +137,13 @@ WRITING AND EVIDENCE PRINCIPLES:
 15. Never present simulated or planned values as measured results. A completed
     empirical tone is allowed only when the supplied evidence_type is Measured.
 
+15a. Forbidden placeholders. Do not output raw placeholder strings such as
+     "[mathematical formulation]", "[mathematical expression]", "[insert equation]",
+     or any similar dummy text in place of real math. Every equation referenced in
+     Section 3.2 / Mathematical Formulation and Section 4 / Experiments must be written
+     as clear LaTeX inline math ($...$) or display math ($$...$$) with actual symbols,
+     variables, and operators. Never substitute a real formula with a descriptive label.
+
 Return JSON matching WriterOutput exactly. Put detailed prose in section
 fields, not in an unstructured summary.
 

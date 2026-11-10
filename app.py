@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import gc
 import json
 import os
 import re
@@ -55,10 +56,34 @@ st.markdown("""
 .stSelectbox [role="option"]{background-color:#101a2d!important;color:#e8eefc!important}
 div[data-testid="stCodeBlock"],div[data-testid="stCodeBlock"]>div,div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock pre,.stCodeBlock code{background:#101a2d!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important;border-color:var(--line)!important}
 div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCodeBlock pre *,.stCodeBlock code *{background:transparent!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important}
-.stTabs [role="tablist"]{background:#0a111f!important;overflow-x:auto!important;scrollbar-color:#50d9e9 #101a2d;white-space:nowrap}
-.stTabs [role="tab"]{background:#101a2d!important;color:#cbd5e1!important;white-space:nowrap!important}
-.stTabs [role="tab"][aria-selected="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid var(--cyan)!important}
+.stTabs [role="tablist"]{background:#0a111f!important;overflow-x:auto!important;scrollbar-color:#50d9e9 #101a2d;white-space:nowrap;gap:.4rem}
+.stTabs [role="tab"]{background:#101a2d!important;color:#cbd5e1!important;white-space:nowrap!important;padding:8px 16px!important;font-size:0.95rem!important;text-overflow:unset!important;overflow:visible!important}
+.stTabs [role="tab"][aria-selected="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid #50d9e9!important}
+.stTabs [role="tab"]:hover{background:#1e293b!important}
+.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px;overflow-x:auto;scrollbar-width:thin}
+.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important;white-space:nowrap!important;text-align:center;min-height:2.5rem;padding:8px 16px!important;font-size:0.95rem!important}
 .stSelectbox label,.stTextInput label,.stTextArea label{color:var(--ink)!important}
+/* Warning / alert boxes - Dark Theme compliant */
+.stWarning,[data-baseweb="notification"],.stAlert,.stAlertContainer{
+    background:rgba(234,179,8,0.12)!important;
+    border:1px solid rgba(234,179,8,0.4)!important;
+    color:#fde047!important;
+    font-weight:500!important;
+}
+.stWarning > div,[data-baseweb="notification"] > div,.stAlert > div{
+    color:#fde047!important;
+}
+.stWarning svg,[data-baseweb="notification"] svg,.stAlert svg{
+    fill:#fde047!important;
+    color:#fde047!important;
+}
+/* Horizontal radio tabs styled like real tabs */
+div[data-baseweb="radio"]{display:flex;gap:.35rem;overflow-x:auto;scrollbar-width:thin;padding-bottom:.25rem}
+div[data-baseweb="radio"] > label{background:#101a2d!important;border:1px solid var(--line)!important;border-radius:9px!important;color:#cbd5e1!important;padding:8px 16px!important;font-size:0.95rem!important;white-space:nowrap!important;text-align:center!important;min-width:fit-content!important;cursor:pointer}
+div[data-baseweb="radio"] > label > div[data-testid="stMarkdownContainer"],div[data-baseweb="radio"] > label > p{color:#cbd5e1!important}
+div[data-baseweb="radio"] > label[data-checked="true"],div[data-baseweb="radio"] > label[aria-checked="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid #50d9e9!important}
+div[data-baseweb="radio"] > label:hover{background:#1e293b!important}
+div[data-baseweb="radio"] input{display:none!important}
 .stDownloadButton>button,.stButton>button{background:#262730!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:10px;font-weight:700;white-space:normal;line-height:1.2;height:48px;min-height:48px;overflow:hidden}
 .stDownloadButton>button:hover,.stButton>button:hover{background:var(--accent-hover)!important;border-color:var(--accent-hover)!important;color:#fff!important}
 [data-testid="stSidebar"]{background:rgba(7,13,25,.96);border-right:1px solid var(--line)}
@@ -248,6 +273,21 @@ def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
     normalized["mathematical_formulas"] = [str(item) for item in normalized["mathematical_formulas"]]
     normalized["threats_to_validity"] = [str(item) for item in normalized["threats_to_validity"]]
     normalized["references"] = [str(item) for item in normalized["references"]]
+    placeholder_patterns = [
+        r"\[mathematical\s+formulation\]",
+        r"\[mathematical\s+expression\]",
+        r"\[insert\s+equation\]",
+        r"\[equation\s+here\]",
+        r"\[formula\]",
+    ]
+    text_keys = ("abstract", "introduction", "related_work", "methodology",
+                 "experimental_results", "discussion", "conclusion")
+    for key in text_keys:
+        value = normalized.get(key, "")
+        if isinstance(value, str):
+            for pattern in placeholder_patterns:
+                value = re.sub(pattern, "[công thức toán chưa được sinh]", value, flags=re.IGNORECASE)
+            normalized[key] = value
     return normalized
 
 
@@ -1365,6 +1405,24 @@ def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
     )
 
 
+@st.cache_data(show_spinner=False)
+def _render_pdf_preview_pages(pdf_bytes: bytes, max_pages: int = 3) -> tuple[list[bytes], int]:
+    """Convert PDF pages to PNG bytes and cache them to avoid re-render on every Streamlit rerun."""
+    import pymupdf as fitz
+
+    document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    total_pages = document.page_count
+    images: list[bytes] = []
+    for page_number, page in enumerate(document, 1):
+        if page_number > max_pages:
+            break
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
+        images.append(pixmap.tobytes("png"))
+    document.close()
+    gc.collect()
+    return images, total_pages
+
+
 def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     paper = sanitize_paper_data(paper)
     pdf = st.session_state["pdf_bytes"]
@@ -1403,21 +1461,13 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         st.warning(comparison.get("status", "Provisional comparison"))
         st.dataframe(pd.DataFrame(comparison["rows"]), width="stretch", hide_index=True)
     try:
-        import pymupdf as fitz
-        document = fitz.open(stream=pdf, filetype="pdf")
-        st.session_state["pdf_pages_images"] = []
-        max_preview_pages = min(document.page_count, 3)
-        for page_number, page in enumerate(document, 1):
-            if page_number > max_preview_pages:
-                break
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
-            page_image = pixmap.tobytes("png")
-            st.session_state["pdf_pages_images"].append(page_image)
+        images, total_pages = _render_pdf_preview_pages(pdf, max_pages=3)
+        st.session_state["pdf_pages_images"] = images
+        for page_number, page_image in enumerate(images, 1):
             st.image(page_image, use_container_width=True)
             st.caption(f"Trang {page_number}")
-        if document.page_count > max_preview_pages:
-            st.caption(f"Xem trước {max_preview_pages}/{document.page_count} trang. Tải file PDF bên dưới để xem toàn bộ.")
-        document.close()
+        if total_pages > 3:
+            st.caption(f"Xem trước 3/{total_pages} trang. Tải file PDF bên dưới để xem toàn bộ.")
     except (ImportError, RuntimeError, ValueError) as error:
         st.warning(f"Không thể dựng ảnh xem trước PDF: {error}. Hãy tải file PDF bên dưới.")
     st.divider()
@@ -1594,13 +1644,21 @@ def main() -> None:
         st.success("Live planner and writer are enabled with Gemini. Benchmark values still require validation with instrumented experiments before publication.")
     render_header(result)
     plan, research, paper, review = result["plan"], result["research"], result["paper"], result["review"]
-    tabs = st.tabs([
+    tabs = [
         "⚙️ Cấu hình chủ đề",
         "📄 Xem trước bản thảo",
         "📊 So sánh & biểu đồ",
         "📦 Tệp kết quả",
-    ])
-    with tabs[0]:
+    ]
+    selected_tab = st.radio(
+        "Chọn tab",
+        tabs,
+        key="selected_tab",
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    tab_index = tabs.index(selected_tab)
+    if tab_index == 0:
         render_plan(plan)
         render_method(plan, paper)
         render_verified_datasets()
@@ -1608,11 +1666,11 @@ def main() -> None:
             render_direct_baseline_comparison(research)
         else:
             render_review(review)
-    with tabs[1]:
+    elif tab_index == 1:
         render_paper(paper, research)
-    with tabs[2]:
+    elif tab_index == 2:
         render_benchmarks(research)
-    with tabs[3]:
+    else:
         render_artifacts()
 
 
