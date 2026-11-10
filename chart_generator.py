@@ -15,6 +15,7 @@ def generate_research_charts(
     """Create publication-ready benchmark and ablation charts."""
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
+    plt.close("all")
     rows = pd.DataFrame(research.get("benchmark_table", []))
     created: list[Path] = []
 

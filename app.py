@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import gc
+import hashlib
 import json
 import os
 import re
@@ -1583,9 +1583,33 @@ def main() -> None:
         run_clicked = st.button("🚀 Bắt đầu sinh bài báo", type="primary", width="stretch")
     needs_initial_pipeline = not bool(st.session_state["full_pipeline_result"])
     if run_clicked or needs_initial_pipeline:
+        # HARD RESET: xóa sạch cache & session state của bài cũ trước khi sinh mới
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        for heavy_key in (
+            "full_pipeline_result",
+            "full_paper_text",
+            "pdf_bytes",
+            "tex_bytes",
+            "benchmark_bytes",
+            "guardrail_bytes",
+            "zip_bytes",
+            "artifact_dir",
+            "pdf_file_path",
+            "benchmark_data",
+            "baseline_metadata",
+            "baseline_pdf_text",
+            "baseline_pdf_signature",
+            "baseline_comparison_token",
+            "pdf_pages_images",
+        ):
+            if heavy_key in st.session_state:
+                del st.session_state[heavy_key]
+        gc.collect()
         with st.status("🤖 Đang điều phối hệ thống nghiên cứu AI...", expanded=True) as status:
             status.write("⏳ Đang khởi tạo Planner Agent và phân loại chủ đề...")
             result = run_pipeline(st.session_state.topic, st.session_state.domain, st.session_state.objective, st.session_state.constraints)
+            gc.collect()
             if not result:
                 status.update(label="Pipeline unavailable", state="error")
                 st.stop()
@@ -1610,6 +1634,7 @@ def main() -> None:
             st.session_state.tex_bytes = (artifact_dir / "paper.tex").read_bytes()
             st.session_state.benchmark_bytes = (artifact_dir / "benchmark_matrix.json").read_bytes()
             st.session_state.guardrail_bytes = (artifact_dir / "guardrail_report.json").read_bytes()
+            gc.collect()
             status.update(label="✅ Pipeline completed · manuscript ready", state="complete", expanded=False)
     result = st.session_state["full_pipeline_result"]
     baseline_metadata = st.session_state.get("baseline_metadata")
