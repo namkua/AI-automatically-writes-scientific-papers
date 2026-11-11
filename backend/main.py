@@ -21,9 +21,12 @@ except Exception:
     pass
 
 import numpy as np
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
+
+load_dotenv(override=False)
 
 from backend.schemas import (
     AblationRow,
@@ -74,7 +77,7 @@ CORE MANDATE — EXPLICIT PROPOSED IDEA:
 WRITING AND EVIDENCE PRINCIPLES:
 4. Abstract hygiene: write one dense 180-250 word paragraph, use each sentence once,
    and do not repeat an evaluation disclaimer or summary clause.
-5. Target approximately 4,500–5,500 words of dense, rigorous, publication-grade
+5. Target approximately 3,500–4,800 words of dense, rigorous, publication-grade
    academic prose across the existing WriterOutput fields while preserving the same
    top-level manuscript sections. Write comprehensive multi-paragraph subsections for
    every section. Expand methodological rationale, related-work contrasts, formal protocol,
@@ -834,67 +837,115 @@ def _make_model_catalog(topic: str, domain: str | None) -> list[ModelSpec]:
     return models
 
 
+_EXHAUSTED_MODELS: set[str] = set()
+_CANDIDATE_MODELS = (
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+)
+
+
+def _get_candidate_models(preferred: str | None = None) -> list[str]:
+    base = list(_CANDIDATE_MODELS)
+    if preferred:
+        clean_pref = preferred.removeprefix("models/").strip()
+        if clean_pref:
+            base = [clean_pref] + [m for m in base if m != clean_pref]
+    return base
+
+
+def _safe_repair_truncated_json(raw: str) -> dict[str, Any] | None:
+    """Attempt to recover key-value pairs from a partially truncated JSON object."""
+    result: dict[str, Any] = {}
+    str_fields = (
+        "title", "abstract", "introduction", "related_work",
+        "methodology", "experimental_results", "discussion", "conclusion",
+    )
+    for field in str_fields:
+        match = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)', raw, flags=re.DOTALL)
+        if match:
+            val = match.group(1)
+            try:
+                result[field] = json.loads(f'"{val}"', strict=False)
+            except Exception:
+                result[field] = val.replace(r"\n", "\n").replace(r'\"', '"')
+    return result if len(result) >= 3 else None
+
+
 def safe_json_loads(text: str) -> Any | None:
-    text = (text or "").strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    elif text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    text = text.strip()
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.DOTALL).strip()
     try:
-        return json.loads(text, strict=False)
+        return json.loads(cleaned, strict=False)
     except json.JSONDecodeError:
+        fixed = re.sub(r'\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})', r"\\\\", cleaned)
         try:
-            fixed = re.sub(r"\\(?![/\"bfnrtu])", r"\\\\", text)
             return json.loads(fixed, strict=False)
-        except Exception:
-            return None
+        except json.JSONDecodeError:
+            return _safe_repair_truncated_json(cleaned)
 
 
-def _safe_live_call(api_key: str | None, prompt: str, max_tokens: int = 24576, model: str | None = None) -> Any | None:
+def _safe_live_call(
+    api_key: str | None,
+    prompt: str,
+    max_tokens: int = 32768,
+    model: str | None = None,
+    response_schema: Any | None = None,
+) -> Any | None:
     if not api_key:
         return None
     try:
         from google import genai
         from google.genai import types
 
-        timeout_ms = 45000 if max_tokens <= 8192 else 90000
+        timeout_ms = 45000 if max_tokens <= 8192 else 110000
         client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_ms))
         preferred_model = (model or os.getenv("GEMINI_MODEL", "")).strip()
-        candidates = [preferred_model] if preferred_model else []
-        candidates.extend(["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"])
-        seen = set()
-        candidate_models = [m for m in candidates if m and not (m in seen or seen.add(m))]
+        candidates = _get_candidate_models(preferred_model)
+        active_candidates = [m for m in candidates if m not in _EXHAUSTED_MODELS] or candidates
 
-        response = None
-        for model_name in candidate_models:
+        for model_name in active_candidates:
             try:
                 print(f"[LiveGemini] Trying model={model_name} (max_tokens={max_tokens})...", flush=True)
+                cfg_kwargs: dict[str, Any] = {
+                    "temperature": 0.3,
+                    "response_mime_type": "application/json",
+                    "max_output_tokens": max_tokens,
+                }
+                if response_schema is not None:
+                    cfg_kwargs["response_schema"] = response_schema
                 response = client.models.generate_content(
                     model=model_name,
                     contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.3,
-                        response_mime_type="application/json",
-                        max_output_tokens=max_tokens,
-                    ),
+                    config=types.GenerateContentConfig(**cfg_kwargs),
                 )
-                if response and getattr(response, "text", None):
-                    print(f"[LiveGemini] Success with model={model_name}, chars={len(response.text)}", flush=True)
-                    break
+                parsed = getattr(response, "parsed", None)
+                if parsed is not None:
+                    if hasattr(parsed, "model_dump"):
+                        print(f"[LiveGemini] Success (parsed) with model={model_name}", flush=True)
+                        return parsed.model_dump()
+                    if isinstance(parsed, dict):
+                        print(f"[LiveGemini] Success (parsed dict) with model={model_name}", flush=True)
+                        return parsed
+                text = getattr(response, "text", None)
+                if text:
+                    loaded = safe_json_loads(text)
+                    if loaded is not None:
+                        print(f"[LiveGemini] Success with model={model_name}, chars={len(text)}", flush=True)
+                        return loaded
+                    print(f"[LiveGemini] safe_json_loads returned None for model={model_name}", flush=True)
             except Exception as err:
+                err_str = str(err)
                 print(f"[LiveGemini] Model={model_name} error: {type(err).__name__}: {err}", flush=True)
+                # Only skip models that are missing or out of daily quota; keep transient 503/504 models eligible.
+                if any(code in err_str for code in ("NOT_FOUND", "404", "RESOURCE_EXHAUSTED", "429")):
+                    _EXHAUSTED_MODELS.add(model_name)
                 continue
-
-        if not response or not getattr(response, "text", None):
-            return None
-
-        parsed = safe_json_loads(response.text)
-        if parsed is None:
-            print("[LiveGemini] safe_json_loads returned None!", flush=True)
-        return parsed
+        return None
     except Exception as err:
         print(f"[LiveGemini] Outer error: {type(err).__name__}: {err}", flush=True)
         return None
@@ -1630,7 +1681,28 @@ def _build_dynamic_reviewer(paper: WriterOutput, research: ResearcherOutput) -> 
     )
 
 
-def _answer_paper_question(question: str, paper: WriterOutput, research: ResearcherOutput) -> str:
+def _answer_paper_question(question: str, paper: WriterOutput, research: ResearcherOutput, api_key: str | None = None) -> str:
+    key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if key:
+        try:
+            qa_prompt = (
+                "You are the Research Assistant for the following scientific manuscript. "
+                "Answer the user's question accurately, concisely, and in the SAME language as the question (Vietnamese or English). "
+                "Base your answer strictly on the manuscript and benchmark data below; note when figures are Controlled Planning Simulation Estimates. "
+                'Return valid JSON: {"answer": "your response"}.\n\n'
+                f"Title: {paper.title}\n"
+                f"Abstract: {paper.abstract}\n"
+                f"Methodology: {paper.methodology[:2000]}\n"
+                f"Experimental Results: {paper.experimental_results[:2000]}\n"
+                f"Benchmarks: {json.dumps([row.model_dump() for row in research.benchmark_table])}\n"
+                f"Ablations: {json.dumps([row.model_dump() for row in research.ablation_study])}\n"
+                f"Question: {question}"
+            )
+            payload = _safe_live_call(key, qa_prompt)
+            if isinstance(payload, dict) and isinstance(payload.get("answer"), str) and payload["answer"].strip():
+                return payload["answer"].strip()
+        except Exception:
+            pass
     normalized = question.strip().lower()
     proposed = next((model for model in research.models_compared if model.role == "Proposed"), None)
     baselines = [model for model in research.models_compared if model.role == "Baseline"]
@@ -1727,16 +1799,19 @@ def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, cons
     try:
         prompt = (
             "Return only valid JSON matching this schema: "
-            "{title, domain, research_question, hypothesis, datasets_catalog:[{name, modality, sample_size, input_spec, primary_metric, description}], "
-            "models_catalog:[{name, role: \"Baseline\" | \"Proposed\", backbone, params_m: float, flops_g: float, latency_ms: float, key_characteristic}], baseline_methods:[str], proposed_method:str, "
+            "{title:str, domain:str, research_question:str, hypothesis:str, "
+            "datasets_catalog:[{name:str, modality:str, sample_size:str, input_spec:str, primary_metric:str, description:str}], "
+            "models_catalog:[{name:str, role:'Baseline'|'Proposed', backbone:str, params_m:float, flops_g:float, latency_ms:float, key_characteristic:str}], "
+            "baseline_methods:[str], proposed_method:str, "
             "evaluation_metrics:[str], experimental_plan:[str], report_outline:[str]}. "
+            "IMPORTANT: In models_catalog, include at least 2 items with role='Baseline' and 1 item with role='Proposed'. "
             "Generate one original proposed method, not a baseline-comparison paper. "
             "In models_catalog, role must be \"Baseline\" or \"Proposed\". params_m, flops_g, and latency_ms must be numeric floats. "
             f"Topic: {topic}; domain: {domain or 'AI research'}; objective: {objective or 'design a rigorous study'}; "
             f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets."
         )
         payload = _safe_live_call(key, prompt, max_tokens=8192, model=model)
-        if not payload:
+        if not isinstance(payload, dict):
             return None
         payload = _normalize_planner_payload(payload, topic)
         return PlannerOutput.model_validate(payload)
@@ -1749,10 +1824,10 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
-    schema = "{title, abstract, keywords:[str], introduction, related_work, methodology, mathematical_formulas:[str], experimental_results, discussion, threats_to_validity:[str], conclusion, references:[str]}"
+    schema = "{title:str, abstract:str, keywords:[str], introduction:str, related_work:str, methodology:str, mathematical_formulas:[str], experimental_results:str, discussion:str, threats_to_validity:[str], conclusion:str, references:[str]}"
     prompt = (
         MASTER_RESEARCH_WRITER_PROMPT.format(sanitized_topic=sanitize_academic_topic(plan.title))
-        + "\nReturn only valid JSON matching this exact schema: " + schema + ". "
+        + "\nReturn only valid JSON matching this exact schema (all section fields MUST be plain markdown strings, not nested objects): " + schema + ". "
         "Use the supplied benchmark rows for quantitative comparisons, preserving their evidence_type. "
         "Do not upgrade Literature Baseline or Controlled Simulation into Measured. "
         f"Topic: {plan.title}. Domain: {plan.domain}. Research question: {plan.research_question}. "
@@ -1769,9 +1844,13 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         f"Knowledge Retrieval Precision: {research.knowledge_retrieval_precision}."
     )
     try:
-        payload = _safe_live_call(key, prompt, max_tokens=24576, model=model)
-        if not payload:
+        payload = _safe_live_call(key, prompt, max_tokens=32768, model=model, response_schema=WriterOutput)
+        if not isinstance(payload, dict):
             return None
+        fallback_dict = _build_synthesis_writer(plan, research).model_dump()
+        for k, default_val in fallback_dict.items():
+            if not payload.get(k):
+                payload[k] = default_val
         payload = _normalize_writer_payload(payload, plan)
         return WriterOutput.model_validate(payload)
     except Exception as err:
