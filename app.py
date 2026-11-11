@@ -1144,6 +1144,19 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
         alignment=TA_RIGHT,
     )
 
+    def _safe_paragraph(text: str, style):
+        if not text:
+            return Spacer(1, 2)
+        try:
+            cleaned = clean_academic_inline_math(str(text))
+            return Paragraph(cleaned, style)
+        except Exception:
+            try:
+                escaped = escape(str(text)).replace("\n", "<br/>")
+                return Paragraph(escaped, style)
+            except Exception:
+                return Paragraph(str(text), style)
+
     def add_academic_text(content: str) -> None:
         for raw_block in content.split("\n\n"):
             block = raw_block.strip()
@@ -1156,8 +1169,8 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                 lines = [line for line in code_text.splitlines() if not line.startswith("=====")]
                 algo_title = lines[0] if lines else "Algorithm 1: Execution Pipeline"
                 algo_body = "\n".join(lines[1:] if len(lines) > 1 else lines).strip()
-                title_p = Paragraph(f"<b>{escape(algo_title)}</b>", h3_style)
-                body_p = Paragraph(escape(algo_body).replace("\n", "<br/>").replace(" ", "&nbsp;"), algo_style)
+                title_p = _safe_paragraph(f"<b>{escape(algo_title)}</b>", h3_style)
+                body_p = _safe_paragraph(escape(algo_body).replace("\n", "<br/>").replace(" ", "&nbsp;"), algo_style)
                 tbl = Table([[title_p], [body_p]], colWidths=[178 * mm])
                 tbl.setStyle(TableStyle([
                     ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
@@ -1176,10 +1189,10 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
 
             lines = block.splitlines()
             if lines and lines[0].startswith("### "):
-                story.append(Paragraph(escape(lines[0][4:]), h2_style))
+                story.append(_safe_paragraph(escape(lines[0][4:]), h2_style))
                 block = "\n".join(lines[1:]).strip()
             elif lines and lines[0].startswith("#### "):
-                story.append(Paragraph(escape(lines[0][5:]), h3_style))
+                story.append(_safe_paragraph(escape(lines[0][5:]), h3_style))
                 block = "\n".join(lines[1:]).strip()
 
             if not block:
@@ -1196,7 +1209,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                         # Display math formula
                         eq_counter[0] += 1
                         eq_result = _formula_image(part_str)
-                        eq_label = Paragraph(f"({eq_counter[0]})", eq_num_style)
+                        eq_label = _safe_paragraph(f"({eq_counter[0]})", eq_num_style)
                         if eq_result:
                             img_data, w_pt, h_pt = eq_result
                             img_flowable = Image(BytesIO(img_data), width=w_pt, height=h_pt)
@@ -1213,7 +1226,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                             story.append(eq_tbl)
                         else:
                             clean_text_eq = _clean_math_for_matplotlib(part_str)
-                            eq_p = Paragraph(f"<i>{clean_text_eq}</i>", ParagraphStyle("EqFallback", parent=body_style, alignment=TA_CENTER))
+                            eq_p = _safe_paragraph(f"<i>{clean_text_eq}</i>", ParagraphStyle("EqFallback", parent=body_style, alignment=TA_CENTER))
                             eq_tbl = Table([[eq_p, eq_label]], colWidths=[162 * mm, 16 * mm])
                             eq_tbl.setStyle(TableStyle([
                                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -1224,7 +1237,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                     else:
                         # Prose segment
                         clean_seg = clean_academic_inline_math(part_str)
-                        story.append(Paragraph(clean_seg.replace("\n", "<br/>"), body_style))
+                        story.append(_safe_paragraph(clean_seg.replace("\n", "<br/>"), body_style))
                 continue
 
             # Bullets vs standard paragraph
@@ -1232,10 +1245,10 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                 for bline in block.splitlines():
                     bline = bline.strip()
                     if bline:
-                        clean_line = re.sub(r"^[-*•]\s*", "• ", bline)
-                        story.append(Paragraph(clean_academic_inline_math(clean_line), bullet_style))
+                        clean_line = re.sub(r"^[-*â€¢]\s*", "â€¢ ", bline)
+                        story.append(_safe_paragraph(clean_line, bullet_style))
             else:
-                story.append(Paragraph(clean_academic_inline_math(block).replace("\n", "<br/>"), body_style))
+                story.append(_safe_paragraph(block.replace("\n", "<br/>"), body_style))
 
     def add_academic_table(title: str, headers: list[str], rows: list[list[Any]], widths: list[float]) -> None:
         story.append(Paragraph(escape(title), table_caption))
@@ -1742,28 +1755,36 @@ def persist_artifacts(paper: dict[str, Any], research: dict[str, Any], pdf: byte
 
         curves = pd.DataFrame(research.get("training_curves", []))
         if not curves.empty:
-            figure, axis = plt.subplots(figsize=(8, 4.5))
-            for column, label in (("proposed_loss", "Loss"), ("proposed_score", "Primary metric")):
-                if column in curves:
-                    axis.plot(curves["epoch"], curves[column], marker="o", label=label)
-            axis.set_title("Training curves")
-            axis.set_xlabel("Epoch")
-            axis.grid(alpha=0.25)
-            axis.legend()
-            figure.tight_layout()
-            figure.savefig(charts_dir / "loss_curve.png", dpi=160)
-            plt.close(figure)
+            try:
+                figure, axis = plt.subplots(figsize=(7, 4))
+                for column, label in (("proposed_loss", "Loss"), ("proposed_score", "Primary metric")):
+                    if column in curves:
+                        axis.plot(curves["epoch"], curves[column], marker="o", label=label)
+                axis.set_title("Training curves")
+                axis.set_xlabel("Epoch")
+                axis.grid(alpha=0.25)
+                axis.legend()
+                plt.tight_layout()
+                figure.savefig(charts_dir / "loss_curve.png", dpi=120)
+                plt.close(figure)
+            except Exception:
+                plt.close("all")
         benchmark = pd.DataFrame(research.get("benchmark_table", []))
         if not benchmark.empty and {"model_name", "primary_metric"}.issubset(benchmark.columns):
-            figure, axis = plt.subplots(figsize=(8, 4.5))
-            axis.bar(benchmark["model_name"], benchmark["primary_metric"])
-            axis.set_title("Benchmark matrix: primary metric")
-            axis.tick_params(axis="x", labelrotation=25)
-            figure.tight_layout()
-            figure.savefig(charts_dir / "benchmark_matrix.png", dpi=160)
-            plt.close(figure)
+            try:
+                figure, axis = plt.subplots(figsize=(7, 4))
+                axis.bar(benchmark["model_name"], benchmark["primary_metric"])
+                axis.set_title("Benchmark matrix: primary metric")
+                axis.tick_params(axis="x", labelrotation=25)
+                plt.tight_layout()
+                figure.savefig(charts_dir / "benchmark_matrix.png", dpi=120)
+                plt.close(figure)
+            except Exception:
+                plt.close("all")
     except ImportError:
         (charts_dir / "README.txt").write_text("Install matplotlib to generate PNG charts.\n", encoding="utf-8")
+    except Exception:
+        plt.close("all")
 
     if not pdf:
         pdf = pdf_report(paper, research, chart_paths=generated_charts)
