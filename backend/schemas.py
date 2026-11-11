@@ -185,6 +185,7 @@ class PipelineRequest(BaseModel):
     objective: str | None = Field(default=None)
     constraints: str | None = Field(default=None)
     api_key: str | None = Field(default=None)
+    model: str | None = Field(default=None, description="Optional Gemini model name (e.g. gemini-3.8-flash)")
     require_verified_data: bool = Field(default=False, description="Require verified local or downloaded data before manuscript generation")
 
 

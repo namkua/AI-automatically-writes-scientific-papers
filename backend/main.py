@@ -12,6 +12,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from dotenv import load_dotenv
+    _repo_root = Path(__file__).resolve().parent.parent
+    load_dotenv(_repo_root / ".env", override=False)
+    load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+except Exception:
+    pass
+
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -826,27 +834,69 @@ def _make_model_catalog(topic: str, domain: str | None) -> list[ModelSpec]:
     return models
 
 
-def _safe_live_call(api_key: str | None, prompt: str) -> Any | None:
+def safe_json_loads(text: str) -> Any | None:
+    text = (text or "").strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        try:
+            fixed = re.sub(r"\\(?![/\"bfnrtu])", r"\\\\", text)
+            return json.loads(fixed, strict=False)
+        except Exception:
+            return None
+
+
+def _safe_live_call(api_key: str | None, prompt: str, max_tokens: int = 24576, model: str | None = None) -> Any | None:
     if not api_key:
         return None
     try:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.3, response_mime_type="application/json", max_output_tokens=8192),
-        )
-        try:
-            return json.loads(response.text)
-        except Exception:
-            text = getattr(response, "text", None)
-            if text:
-                return json.loads(text)
+        timeout_ms = 45000 if max_tokens <= 8192 else 90000
+        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_ms))
+        preferred_model = (model or os.getenv("GEMINI_MODEL", "")).strip()
+        candidates = [preferred_model] if preferred_model else []
+        candidates.extend(["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"])
+        seen = set()
+        candidate_models = [m for m in candidates if m and not (m in seen or seen.add(m))]
+
+        response = None
+        for model_name in candidate_models:
+            try:
+                print(f"[LiveGemini] Trying model={model_name} (max_tokens={max_tokens})...", flush=True)
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,
+                        response_mime_type="application/json",
+                        max_output_tokens=max_tokens,
+                    ),
+                )
+                if response and getattr(response, "text", None):
+                    print(f"[LiveGemini] Success with model={model_name}, chars={len(response.text)}", flush=True)
+                    break
+            except Exception as err:
+                print(f"[LiveGemini] Model={model_name} error: {type(err).__name__}: {err}", flush=True)
+                continue
+
+        if not response or not getattr(response, "text", None):
             return None
-    except Exception:
+
+        parsed = safe_json_loads(response.text)
+        if parsed is None:
+            print("[LiveGemini] safe_json_loads returned None!", flush=True)
+        return parsed
+    except Exception as err:
+        print(f"[LiveGemini] Outer error: {type(err).__name__}: {err}", flush=True)
         return None
 
 
@@ -1153,6 +1203,20 @@ def sanitize_math_placeholders(text: str) -> str:
     return value
 
 
+def _strip_math_delimiters(formula: str) -> str:
+    """Loại bỏ ký tự bao toán học ngoài ($...$, $$...$$, \\[...\\], \\(...\\)) để st.latex / LaTeX block không bị lỗi."""
+    s = str(formula).strip()
+    changed = True
+    while changed and s:
+        changed = False
+        for left, right in (("$$", "$$"), ("$", "$"), (r"\[", r"\]"), (r"\(", r"\)")):
+            if len(s) > len(left) + len(right) and s.startswith(left) and s.endswith(right):
+                s = s[len(left):-len(right)].strip()
+                changed = True
+                break
+    return s
+
+
 def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
     """Áp dụng sanitize placeholder lên các trường văn bản của WriterOutput trước khi trả về UI."""
     text_fields = (
@@ -1164,6 +1228,8 @@ def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
         value = data.get(field, "")
         if isinstance(value, str):
             data[field] = sanitize_math_placeholders(value)
+    formulas = data.get("mathematical_formulas") or []
+    data["mathematical_formulas"] = [_strip_math_delimiters(f) for f in formulas if _strip_math_delimiters(f)] or ["y = f(x)"]
     return WriterOutput(**data)
 
 
@@ -1591,7 +1657,70 @@ def _answer_paper_question(question: str, paper: WriterOutput, research: Researc
     return f"This paper studies {paper.title}. Its central claim is that a topic-aware design can improve the target task while keeping robustness and deployment cost visible. Ask about the baseline comparison, datasets, method, results, or limitations for a more specific answer."
 
 
-def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, constraints: str | None, api_key: str | None) -> PlannerOutput | None:
+def _normalize_planner_payload(payload: dict[str, Any], topic: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    for ds in payload.get("datasets_catalog", []):
+        if isinstance(ds, dict):
+            ds["sample_size"] = str(ds.get("sample_size", "10,000 samples"))
+    has_proposed = False
+    for m in payload.get("models_catalog", []):
+        if isinstance(m, dict):
+            raw_role = str(m.get("role", "")).strip().capitalize()
+            if "propos" in raw_role.lower():
+                m["role"] = "Proposed"
+                has_proposed = True
+            elif raw_role == "Baseline":
+                m["role"] = "Baseline"
+            else:
+                m["role"] = "Baseline"
+            for num_field, default_val in [("params_m", 125.0), ("flops_g", 15.0), ("latency_ms", 28.0), ("vram_mb", 512.0)]:
+                v = m.get(num_field)
+                if not isinstance(v, (int, float)):
+                    match = re.findall(r"[-+]?\d*\.\d+|\d+", str(v))
+                    m[num_field] = float(match[0]) if match else default_val
+                else:
+                    m[num_field] = float(v)
+    if payload.get("models_catalog") and not has_proposed:
+        payload["models_catalog"][-1]["role"] = "Proposed"
+    for list_key in ("baseline_methods", "evaluation_metrics", "experimental_plan", "report_outline"):
+        val = payload.get(list_key)
+        if isinstance(val, str):
+            payload[list_key] = [s.strip() for s in val.split("\n") if s.strip()]
+        elif not isinstance(val, list) or not val:
+            payload[list_key] = [f"Standard {list_key.replace('_', ' ')} protocol"]
+        else:
+            payload[list_key] = [str(x) for x in val]
+    return payload
+
+
+def _normalize_writer_payload(payload: dict[str, Any], plan: PlannerOutput) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    if not payload.get("title"):
+        payload["title"] = plan.title
+    for str_key in ("abstract", "introduction", "related_work", "methodology", "experimental_results", "discussion", "conclusion"):
+        val = payload.get(str_key)
+        if isinstance(val, dict):
+            payload[str_key] = "\n\n".join(f"### {k}\n{v}" for k, v in val.items())
+        elif isinstance(val, list):
+            payload[str_key] = "\n\n".join(str(x) for x in val)
+        elif not val:
+            payload[str_key] = f"Section {str_key} for {plan.title}."
+        else:
+            payload[str_key] = str(val)
+    for list_key in ("keywords", "mathematical_formulas", "threats_to_validity", "references"):
+        val = payload.get(list_key)
+        if isinstance(val, str):
+            payload[list_key] = [s.strip() for s in val.split("\n") if s.strip()]
+        elif not isinstance(val, list) or not val:
+            payload[list_key] = [f"Standard {list_key}"]
+        else:
+            payload[list_key] = [str(x) for x in val]
+    return payload
+
+
+def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, constraints: str | None, api_key: str | None, model: str | None = None) -> PlannerOutput | None:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
@@ -1599,21 +1728,24 @@ def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, cons
         prompt = (
             "Return only valid JSON matching this schema: "
             "{title, domain, research_question, hypothesis, datasets_catalog:[{name, modality, sample_size, input_spec, primary_metric, description}], "
-            "models_catalog:[{name, role, backbone, params_m, flops_g, latency_ms, key_characteristic}], baseline_methods:[str], proposed_method:str, "
+            "models_catalog:[{name, role: \"Baseline\" | \"Proposed\", backbone, params_m: float, flops_g: float, latency_ms: float, key_characteristic}], baseline_methods:[str], proposed_method:str, "
             "evaluation_metrics:[str], experimental_plan:[str], report_outline:[str]}. "
             "Generate one original proposed method, not a baseline-comparison paper. "
+            "In models_catalog, role must be \"Baseline\" or \"Proposed\". params_m, flops_g, and latency_ms must be numeric floats. "
             f"Topic: {topic}; domain: {domain or 'AI research'}; objective: {objective or 'design a rigorous study'}; "
-            f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets and flag any unavailable measurements as planned experiments."
+            f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets."
         )
-        payload = _safe_live_call(key, prompt)
+        payload = _safe_live_call(key, prompt, max_tokens=8192, model=model)
         if not payload:
             return None
+        payload = _normalize_planner_payload(payload, topic)
         return PlannerOutput.model_validate(payload)
-    except Exception:
+    except Exception as err:
+        print(f"[LiveGemini] Planner validation failed: {type(err).__name__}: {err}", flush=True)
         return None
 
 
-def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key: str | None) -> WriterOutput | None:
+def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key: str | None, model: str | None = None) -> WriterOutput | None:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
@@ -1637,9 +1769,13 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         f"Knowledge Retrieval Precision: {research.knowledge_retrieval_precision}."
     )
     try:
-        payload = _safe_live_call(key, prompt)
-        return WriterOutput.model_validate(payload) if payload else None
-    except Exception:
+        payload = _safe_live_call(key, prompt, max_tokens=24576, model=model)
+        if not payload:
+            return None
+        payload = _normalize_writer_payload(payload, plan)
+        return WriterOutput.model_validate(payload)
+    except Exception as err:
+        print(f"[LiveGemini] Writer validation failed: {type(err).__name__}: {err}", flush=True)
         return None
 
 
@@ -1649,15 +1785,23 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     objective = request.objective or "Design a rigorous, reproducible, and evidence-driven study."
     if request.require_verified_data:
         _validate_verified_request(topic, request.domain, request.objective)
+    if not request.api_key:
+        try:
+            from dotenv import load_dotenv
+            _root = Path(__file__).resolve().parent.parent
+            load_dotenv(_root / ".env", override=True)
+        except Exception:
+            pass
     api_key = request.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    plan = _maybe_live_plan(topic, domain, objective, request.constraints, api_key)
+    model = request.model or os.getenv("GEMINI_MODEL") or None
+    plan = _maybe_live_plan(topic, domain, objective, request.constraints, api_key, model=model)
     mode_used = "live_gemini" if plan is not None else "dynamic_fallback"
     if plan is None:
         plan = _build_dynamic_planner(topic, domain, objective)
     plan = _ensure_system_intelligence(plan, topic, domain, objective)
     research = _build_dynamic_research(plan)
     _validate_research_contract(plan, research)
-    live_paper = _maybe_live_writer(plan, research, api_key)
+    live_paper = _maybe_live_writer(plan, research, api_key, model=model)
     paper = live_paper or _build_synthesis_writer(plan, research)
     paper = sanitize_writer_output(paper)
     paper = _ensure_gap_and_proposal_sections(paper, plan)
