@@ -224,12 +224,19 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
             extra_parts.append(f"Align primary evaluation metrics with baseline metrics: {b_metrics}")
         if extra_parts:
             effective_constraints = (effective_constraints + "; " if effective_constraints.strip() else "") + "; ".join(extra_parts)
+    active_gemini_key = (
+        st.session_state.get("user_gemini_api_key", "").strip()
+        or os.getenv("GEMINI_API_KEY", "").strip()
+        or os.getenv("GOOGLE_API_KEY", "").strip()
+        or None
+    )
     payload = {
         "topic": topic,
         "domain": domain,
         "objective": objective,
         "constraints": effective_constraints,
         "require_verified_data": False,
+        "api_key": active_gemini_key,
     }
     try:
         api_key = os.getenv("SMART_RESEARCH_API_KEY", "").strip()
@@ -2243,8 +2250,35 @@ def main() -> None:
         st.session_state.setdefault(key, value)
     with st.sidebar:
         st.markdown("## Bảng điều khiển nghiên cứu")
-        model_choices = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
-        current_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        default_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+        st.session_state.setdefault("user_gemini_api_key", default_api_key)
+        entered_api_key = st.text_input(
+            "🔑 Gemini API Key",
+            key="user_gemini_api_key",
+            type="password",
+            placeholder="AIzaSy... (hoặc lấy từ .env)",
+            help="Nhập trực tiếp Gemini API Key tại đây để kích hoạt chế độ Live Planner & Writer.",
+        ).strip()
+        if entered_api_key:
+            if os.environ.get("GEMINI_API_KEY") != entered_api_key:
+                os.environ["GEMINI_API_KEY"] = entered_api_key
+                try:
+                    from backend.main import _EXHAUSTED_MODELS
+                    _EXHAUSTED_MODELS.clear()
+                except Exception:
+                    pass
+            st.caption("✅ Đã kết nối Gemini API Key")
+        else:
+            st.caption("⚠️ Chưa nhập API Key (Chế độ mô phỏng)")
+        model_choices = [
+            "gemini-3.6-flash",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+        ]
+        current_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
         selected_model = st.selectbox(
             "🤖 Mô hình Gemini ưu tiên",
             model_choices,

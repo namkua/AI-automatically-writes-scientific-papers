@@ -69,7 +69,7 @@ CORE MANDATE — EXPLICIT PROPOSED IDEA:
 WRITING AND EVIDENCE PRINCIPLES:
 4. Abstract hygiene: write one dense 180-250 word paragraph, use each sentence once,
    and do not repeat an evaluation disclaimer or summary clause.
-5. Target approximately 4,500–5,500 words of dense, rigorous, publication-grade
+5. Target approximately 2,500–3,200 words of dense, rigorous, publication-grade
    academic prose across the existing WriterOutput fields while preserving the same
    top-level manuscript sections. Write comprehensive multi-paragraph subsections for
    every section. Expand methodological rationale, related-work contrasts, formal protocol,
@@ -830,6 +830,41 @@ def _make_model_catalog(topic: str, domain: str | None) -> list[ModelSpec]:
 
 
 _EXHAUSTED_MODELS: set[str] = set()
+_CANDIDATE_MODELS = (
+    "gemini-3.6-flash",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+)
+
+
+def _get_candidate_models(preferred: str | None = None) -> list[str]:
+    base = list(_CANDIDATE_MODELS)
+    if preferred:
+        clean_pref = preferred.removeprefix("models/").strip()
+        if clean_pref in base:
+            base = [clean_pref] + [m for m in base if m != clean_pref]
+    return base
+
+
+def _safe_repair_truncated_json(raw: str) -> dict[str, Any] | None:
+    """Attempt to recover key-value pairs from a partially truncated JSON object."""
+    result: dict[str, Any] = {}
+    str_fields = (
+        "title", "abstract", "introduction", "related_work",
+        "methodology", "experimental_results", "discussion", "conclusion",
+    )
+    for field in str_fields:
+        match = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)', raw, flags=re.DOTALL)
+        if match:
+            val = match.group(1)
+            try:
+                result[field] = json.loads(f'"{val}"')
+            except Exception:
+                result[field] = val.replace(r"\n", "\n").replace(r'\"', '"')
+    return result if len(result) >= 3 else None
 
 
 def _parse_json_lenient(raw_text: str) -> Any:
@@ -840,7 +875,13 @@ def _parse_json_lenient(raw_text: str) -> Any:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         fixed = re.sub(r'\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})', r"\\\\", cleaned)
-        return json.loads(fixed)
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            repaired = _safe_repair_truncated_json(cleaned)
+            if repaired is not None:
+                return repaired
+            raise
 
 
 def _safe_live_call(api_key: str | None, prompt: str, response_schema: Any | None = None) -> Any | None:
@@ -850,23 +891,16 @@ def _safe_live_call(api_key: str | None, prompt: str, response_schema: Any | Non
         from google import genai
         from google.genai import types
 
-        preferred_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-        fallback_chain = (
-            "gemini-3.6-flash",
-            "gemini-3.5-flash",
-            "gemini-3.5-flash-lite",
-            "gemini-3.1-flash-lite",
-            "gemini-3.8-flash",
-        )
-        candidates = [preferred_model] + [m for m in fallback_chain if m != preferred_model]
-        active_candidates = [m for m in candidates if m not in _EXHAUSTED_MODELS] or candidates
         client = genai.Client(api_key=api_key)
+        preferred_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        candidates = _get_candidate_models(preferred_model)
+        active_candidates = [m for m in candidates if m not in _EXHAUSTED_MODELS] or candidates
         for model_name in active_candidates:
             try:
                 cfg_kwargs: dict[str, Any] = {
                     "temperature": 0.3,
                     "response_mime_type": "application/json",
-                    "max_output_tokens": 8192,
+                    "max_output_tokens": 32768,
                 }
                 if response_schema is not None:
                     cfg_kwargs["response_schema"] = response_schema
@@ -875,6 +909,12 @@ def _safe_live_call(api_key: str | None, prompt: str, response_schema: Any | Non
                     contents=prompt,
                     config=types.GenerateContentConfig(**cfg_kwargs),
                 )
+                parsed = getattr(response, "parsed", None)
+                if parsed is not None:
+                    if hasattr(parsed, "model_dump"):
+                        return parsed.model_dump()
+                    if isinstance(parsed, dict):
+                        return parsed
                 text = getattr(response, "text", None)
                 if text:
                     return _parse_json_lenient(text)
@@ -1749,7 +1789,12 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         payload = _safe_live_call(key, prompt, response_schema=WriterOutput)
         if not isinstance(payload, dict):
             return None
-        return WriterOutput.model_validate(_normalize_writer_payload(payload))
+        normalized = _normalize_writer_payload(payload)
+        fallback_dict = _build_synthesis_writer(plan, research).model_dump()
+        for k, default_val in fallback_dict.items():
+            if not normalized.get(k):
+                normalized[k] = default_val
+        return WriterOutput.model_validate(normalized)
     except Exception:
         return None
 
