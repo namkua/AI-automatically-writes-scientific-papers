@@ -2126,7 +2126,7 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     if comparison.get("rows"):
         st.subheader("Baseline Paper Comparison")
         st.warning(comparison.get("status", "Provisional comparison"))
-        st.dataframe(pd.DataFrame(comparison["rows"]), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(comparison["rows"]).fillna("").astype(str), width="stretch", hide_index=True)
     try:
         images, total_pages = _render_pdf_preview_pages(pdf, max_pages=3)
         st.session_state["pdf_pages_images"] = images
@@ -2220,7 +2220,7 @@ def render_direct_baseline_comparison(research: dict[str, Any]) -> None:
     if not comparison:
         return
     st.subheader("So sánh trực tiếp với PDF bài gốc")
-    st.dataframe(pd.DataFrame(comparison.get("rows", [])), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame(comparison.get("rows", [])).fillna("").astype(str), width="stretch", hide_index=True)
     notes = comparison.get("review", {})
     if notes:
         st.markdown("### Nhận xét ngắn")
@@ -2386,6 +2386,10 @@ def main() -> None:
     result = st.session_state["full_pipeline_result"]
     baseline_metadata = st.session_state.get("baseline_metadata")
     baseline_text = st.session_state.get("baseline_pdf_text", "")
+    if not result:
+        st.warning("Không có kết quả pipeline để hiển thị. Vui lòng chạy lại pipeline.")
+        st.stop()
+    needs_initial_pipeline = bool(result and baseline_metadata and not st.session_state.get("baseline_comparison_token"))
     should_compare = bool(compare_clicked or run_clicked or needs_initial_pipeline)
     if baseline_metadata and result and should_compare:
         comparison_payload = json.dumps(
