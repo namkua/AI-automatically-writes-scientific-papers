@@ -77,9 +77,10 @@ CORE MANDATE — EXPLICIT PROPOSED IDEA:
 WRITING AND EVIDENCE PRINCIPLES:
 4. Abstract hygiene: write one dense 180-250 word paragraph, use each sentence once,
    and do not repeat an evaluation disclaimer or summary clause.
-5. Target approximately 3,500–4,800 words of dense, rigorous, publication-grade
+5. **LENGTH REQUIREMENT:** Target approximately 3,800–4,800 words of dense, rigorous, publication-grade
    academic prose across the existing WriterOutput fields while preserving the same
-   top-level manuscript sections. Write comprehensive multi-paragraph subsections for
+   top-level manuscript sections. **You MUST produce a full-length manuscript of 6–8 pages (equivalent to IEEE double-column formatting).**
+   Write comprehensive multi-paragraph subsections for
    every section. Expand methodological rationale, related-work contrasts, formal protocol,
    per-result interpretation, error analysis, reproducibility details, complexity proofs,
    and limitations. Do not meet the target by repeating claims or adding

@@ -1266,8 +1266,8 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                 lines = [line for line in code_text.splitlines() if not line.startswith("=====")]
                 algo_title = lines[0] if lines else "Algorithm 1: Execution Pipeline"
                 algo_body = "\n".join(lines[1:] if len(lines) > 1 else lines).strip()
-                title_p = Paragraph(f"<b>{escape(algo_title)}</b>", h3_style)
-                body_p = Paragraph(escape(algo_body).replace("\n", "<br/>").replace(" ", "&nbsp;"), algo_style)
+                title_p = _safe_paragraph(f"<b>{escape(algo_title)}</b>", h3_style)
+                body_p = _safe_paragraph(escape(algo_body).replace("\n", "<br/>").replace(" ", "&nbsp;"), algo_style)
                 tbl = Table([[title_p], [body_p]], colWidths=[178 * mm])
                 tbl.setStyle(TableStyle([
                     ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
@@ -1287,15 +1287,15 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
             lines = block.splitlines()
             raw_first = lines[0].strip() if lines else ""
             if raw_first.startswith("### "):
-                story.append(Paragraph(escape(raw_first[4:].strip()), h2_style))
+                story.append(_safe_paragraph(escape(raw_first[4:].strip()), h2_style))
                 block = "\n".join(lines[1:]).strip()
             elif raw_first.startswith("#### "):
-                story.append(Paragraph(escape(raw_first[5:].strip()), h3_style))
+                story.append(_safe_paragraph(escape(raw_first[5:].strip()), h3_style))
                 block = "\n".join(lines[1:]).strip()
             elif re.match(r"^(?:\*\*)?(\d+\.\d+(?:\.\d+)?\s+[A-Za-z]|\bAppendix\s+[A-Z]:\s+[A-Za-z])", raw_first):
                 heading_title = raw_first.strip("*").strip()
                 target_style = h3_style if re.match(r"^\d+\.\d+\.\d+\s+", heading_title) else h2_style
-                story.append(Paragraph(escape(heading_title), target_style))
+                story.append(_safe_paragraph(escape(heading_title), target_style))
                 block = "\n".join(lines[1:]).strip()
 
             if not block:
@@ -1312,7 +1312,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                         # Display math formula
                         eq_counter[0] += 1
                         eq_result = _formula_image(part_str)
-                        eq_label = Paragraph(f"({eq_counter[0]})", eq_num_style)
+                        eq_label = _safe_paragraph(f"({eq_counter[0]})", eq_num_style)
                         if eq_result:
                             img_data, w_pt, h_pt = eq_result
                             img_flowable = Image(BytesIO(img_data), width=w_pt, height=h_pt)
@@ -1855,28 +1855,36 @@ def persist_artifacts(paper: dict[str, Any], research: dict[str, Any], pdf: byte
 
         curves = pd.DataFrame(research.get("training_curves", []))
         if not curves.empty:
-            figure, axis = plt.subplots(figsize=(8, 4.5))
-            for column, label in (("proposed_loss", "Loss"), ("proposed_score", "Primary metric")):
-                if column in curves:
-                    axis.plot(curves["epoch"], curves[column], marker="o", label=label)
-            axis.set_title("Training curves")
-            axis.set_xlabel("Epoch")
-            axis.grid(alpha=0.25)
-            axis.legend()
-            figure.tight_layout()
-            figure.savefig(charts_dir / "loss_curve.png", dpi=160)
-            plt.close(figure)
+            try:
+                figure, axis = plt.subplots(figsize=(7, 4))
+                for column, label in (("proposed_loss", "Loss"), ("proposed_score", "Primary metric")):
+                    if column in curves:
+                        axis.plot(curves["epoch"], curves[column], marker="o", label=label)
+                axis.set_title("Training curves")
+                axis.set_xlabel("Epoch")
+                axis.grid(alpha=0.25)
+                axis.legend()
+                plt.tight_layout()
+                figure.savefig(charts_dir / "loss_curve.png", dpi=120)
+                plt.close(figure)
+            except Exception:
+                plt.close("all")
         benchmark = pd.DataFrame(research.get("benchmark_table", []))
         if not benchmark.empty and {"model_name", "primary_metric"}.issubset(benchmark.columns):
-            figure, axis = plt.subplots(figsize=(8, 4.5))
-            axis.bar(benchmark["model_name"], benchmark["primary_metric"])
-            axis.set_title("Benchmark matrix: primary metric")
-            axis.tick_params(axis="x", labelrotation=25)
-            figure.tight_layout()
-            figure.savefig(charts_dir / "benchmark_matrix.png", dpi=160)
-            plt.close(figure)
+            try:
+                figure, axis = plt.subplots(figsize=(7, 4))
+                axis.bar(benchmark["model_name"], benchmark["primary_metric"])
+                axis.set_title("Benchmark matrix: primary metric")
+                axis.tick_params(axis="x", labelrotation=25)
+                plt.tight_layout()
+                figure.savefig(charts_dir / "benchmark_matrix.png", dpi=120)
+                plt.close(figure)
+            except Exception:
+                plt.close("all")
     except ImportError:
         (charts_dir / "README.txt").write_text("Install matplotlib to generate PNG charts.\n", encoding="utf-8")
+    except Exception:
+        plt.close("all")
 
     if not pdf:
         pdf = pdf_report(paper, research, chart_paths=generated_charts)
@@ -2221,7 +2229,7 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     if comparison.get("rows"):
         st.subheader("Baseline Paper Comparison")
         st.warning(comparison.get("status", "Provisional comparison"))
-        st.dataframe(pd.DataFrame(comparison["rows"]), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(comparison["rows"]).fillna("").astype(str), width="stretch", hide_index=True)
     try:
         images, total_pages = _render_pdf_preview_pages(pdf, max_pages=3)
         st.session_state["pdf_pages_images"] = images
@@ -2323,7 +2331,7 @@ def render_direct_baseline_comparison(research: dict[str, Any]) -> None:
     if not comparison:
         return
     st.subheader("So sánh trực tiếp với PDF bài gốc")
-    st.dataframe(pd.DataFrame(comparison.get("rows", [])), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame(comparison.get("rows", [])).fillna("").astype(str), width="stretch", hide_index=True)
     notes = comparison.get("review", {})
     if notes:
         st.markdown("### Nhận xét ngắn")
@@ -2374,6 +2382,16 @@ def main() -> None:
         "paper_chat_history": [],
     }.items():
         st.session_state.setdefault(key, value)
+    if "preset" not in st.session_state:
+        st.session_state["preset"] = CUSTOM
+    if "topic" not in st.session_state:
+        st.session_state["topic"] = ""
+    if "domain" not in st.session_state:
+        st.session_state["domain"] = ""
+    if "objective" not in st.session_state:
+        st.session_state["objective"] = ""
+    if "constraints" not in st.session_state:
+        st.session_state["constraints"] = ""
     with st.sidebar:
         st.markdown("## Bảng điều khiển nghiên cứu")
         try:
@@ -2507,7 +2525,8 @@ def main() -> None:
         return
     baseline_metadata = st.session_state.get("baseline_metadata")
     baseline_text = st.session_state.get("baseline_pdf_text", "")
-    should_compare = bool(compare_clicked or run_clicked)
+    needs_initial_pipeline = bool(result and baseline_metadata and not st.session_state.get("baseline_comparison_token"))
+    should_compare = bool(compare_clicked or run_clicked or needs_initial_pipeline)
     if baseline_metadata and result and should_compare:
         comparison_payload = json.dumps(
             [baseline_metadata, baseline_text, result.get("paper", {}).get("title", "")],
