@@ -20,12 +20,35 @@ from typing import Any
 import pandas as pd
 import requests
 import streamlit as st
-from dotenv import load_dotenv
 from backend.guardrail_agent import audit_manuscript
 from chart_generator import generate_research_charts
 from academic_sanitizer import sanitize_academic_topic
 
-load_dotenv(override=False)
+try:
+    from dotenv import load_dotenv
+    _repo_root = Path(__file__).resolve().parent
+    load_dotenv(_repo_root / ".env", override=True)
+except Exception:
+    pass
+
+
+def _get_active_gemini_key() -> str | None:
+    try:
+        typed = str(st.session_state.get("gemini_api_key_input", "") or "").strip()
+        if typed:
+            return typed
+        stored = str(st.session_state.get("gemini_api_key", "") or "").strip()
+        if stored:
+            return stored
+    except Exception:
+        pass
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+    except Exception:
+        pass
+    candidate = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+    return candidate or None
 
 try:
     import plotly.express as px
@@ -57,8 +80,8 @@ st.markdown("""
 .stSelectbox .react-aria-ComboBox>div,.stSelectbox div:has(> input[role="combobox"]){background-color:#101a2d!important;color:#e8eefc!important;border:1px solid var(--line)!important;border-radius:10px!important}
 .stSelectbox input[role="combobox"]{background-color:transparent!important;color:#ffffff!important;-webkit-text-fill-color:#ffffff!important}
 .stSelectbox [role="option"]{background-color:#101a2d!important;color:#e8eefc!important}
-div[data-testid="stCodeBlock"],div[data-testid="stCodeBlock"]>div,div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock pre,.stCodeBlock code{background:#101a2d!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important;border-color:var(--line)!important}
-div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCodeBlock pre *,.stCodeBlock code *{background:transparent!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important}
+div[data-testid="stCode"],div[data-testid="stCode"]>div,div[data-testid="stCode"] pre,div[data-testid="stCode"] code,div[data-testid="stCodeBlock"],div[data-testid="stCodeBlock"]>div,div[data-testid="stCodeBlock"] pre,div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock pre,.stCodeBlock code,[data-testid="stMarkdownContainer"] pre,[data-testid="stMarkdownContainer"] code{background:#1E1E1E!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important;border-color:var(--line)!important}
+div[data-testid="stCode"] pre *,div[data-testid="stCode"] code *,div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCodeBlock pre *,.stCodeBlock code *,[data-testid="stMarkdownContainer"] pre *,[data-testid="stMarkdownContainer"] pre code{background:transparent!important;color:#e8eefc!important;-webkit-text-fill-color:#e8eefc!important}
 .stTabs [role="tablist"]{background:#0a111f!important;overflow-x:auto!important;scrollbar-color:#50d9e9 #101a2d;white-space:nowrap;gap:.4rem}
 .stTabs [role="tab"]{background:#101a2d!important;color:#cbd5e1!important;white-space:nowrap!important;padding:8px 16px!important;font-size:0.95rem!important;text-overflow:unset!important;overflow:visible!important}
 .stTabs [role="tab"][aria-selected="true"]{background:#173b60!important;color:#ffffff!important;border-bottom:2px solid #50d9e9!important}
@@ -98,7 +121,8 @@ div[data-baseweb="radio"] input{display:none!important}
 [data-testid="stImage"],[data-testid="stImage"]>div,[data-testid="stImage"] img{width:100%!important;max-width:100%!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important}
 [data-testid="stImage"]{margin:0 0 1rem!important}
 [data-testid="stDataFrame"]>div{overflow-x:auto!important}
-[data-testid="stMarkdownContainer"] .katex-display,[data-testid="stMarkdownContainer"] .katex{background:var(--code)!important;color:var(--ink)!important;padding:.45rem .65rem;border-radius:8px;overflow-x:auto}
+[data-testid="stMarkdownContainer"] .katex-display{background:var(--code)!important;color:var(--ink)!important;padding:.6rem .9rem;border-radius:10px;margin:.6rem 0;overflow-x:auto}
+[data-testid="stMarkdownContainer"] .katex{background:transparent!important;color:var(--ink)!important;padding:0 .12rem}
 [data-testid="stExpander"]{border:1px solid var(--line);border-radius:12px;background:rgba(17,27,48,.48)}
 .artifact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
 .artifact-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem;min-width:0;overflow-wrap:anywhere}
@@ -108,7 +132,7 @@ div[data-baseweb="radio"] input{display:none!important}
 </style>
 <style>
 [data-testid="stMetric"]{min-width:0!important}
-[data-testid="stMetric"] label{white-space:nowrap!important;line-height:1.2!important;overflow:hidden!important;text-overflow:ellipsis!important}
+[data-testid="stMetric"] label{white-space:normal!important;line-height:1.25!important;overflow:visible!important}
 [data-testid="stMetric"] [data-testid="stMetricValue"]{white-space:nowrap!important}
 [data-testid="stMetric"] [data-testid="stMetricDelta"]{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 .architecture-flow{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;background:#262730;border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.25rem;margin:.35rem 0 1.15rem;box-shadow:0 12px 28px #0003}
@@ -134,9 +158,12 @@ div.block-container{padding-top:1.5rem!important;padding-bottom:2rem!important}
 [data-testid="stSelectbox"] [data-baseweb="select"]>div,div[data-baseweb="select"]>div,[role="option"]{
   background:#262730!important;color:#FAFAFA!important;-webkit-text-fill-color:#FAFAFA!important
 }
+div[data-testid="stCode"],div[data-testid="stCode"]>div,div[data-testid="stCode"] pre,div[data-testid="stCode"] code,
 div[data-testid="stCodeBlock"],div[data-testid="stCodeBlock"]>div,div[data-testid="stCodeBlock"] pre,
 div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock pre,.stCodeBlock code,
+[data-testid="stMarkdownContainer"] pre,[data-testid="stMarkdownContainer"] pre code,
 .architecture-code,.dataset-command{background:#1E1E1E!important;color:#FAFAFA!important}
+[data-testid="stMarkdownContainer"] pre{border:1px solid var(--line)!important;border-radius:12px!important;padding:1rem 1.15rem!important;font-family:Consolas,"Courier New",monospace!important;font-size:.9rem!important;line-height:1.5!important;white-space:pre!important;overflow-x:auto!important}
 [data-testid="stDataFrame"],[data-testid="stDataFrame"]>div,.stDataFrame,.stTable{max-width:100%!important;overflow-x:auto!important}
 .chat-response{background:#262730!important;color:#FAFAFA!important;border:1px solid #363945!important;border-radius:8px;padding:1rem;margin-top:.75rem;line-height:1.55;overflow-wrap:anywhere}
 [data-testid="stSidebar"]{min-width:18rem;max-width:22rem}
@@ -224,28 +251,28 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
             extra_parts.append(f"Align primary evaluation metrics with baseline metrics: {b_metrics}")
         if extra_parts:
             effective_constraints = (effective_constraints + "; " if effective_constraints.strip() else "") + "; ".join(extra_parts)
-    active_gemini_key = (
-        st.session_state.get("user_gemini_api_key", "").strip()
-        or os.getenv("GEMINI_API_KEY", "").strip()
-        or os.getenv("GOOGLE_API_KEY", "").strip()
-        or None
-    )
+    active_key = _get_active_gemini_key()
+    active_model = st.session_state.get("gemini_model") or os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
     payload = {
         "topic": topic,
         "domain": domain,
         "objective": objective,
         "constraints": effective_constraints,
+        "api_key": active_key,
+        "model": active_model,
         "require_verified_data": False,
-        "api_key": active_gemini_key,
     }
     try:
         api_key = os.getenv("SMART_RESEARCH_API_KEY", "").strip()
         headers = {"X-API-Key": api_key} if api_key else {}
         response = requests.post(
-            "http://127.0.0.1:8000/api/pipeline/run", json=payload, headers=headers, timeout=120
+            "http://127.0.0.1:8000/api/pipeline/run", json=payload, headers=headers, timeout=300
         )
         if response.ok:
             return response.json()
+        if response.status_code in (404, 502, 503):
+            # Port 8000 is occupied by another local service (e.g., Docker)
+            raise requests.RequestException(f"Foreign service on port 8000 returned HTTP {response.status_code}")
         try:
             return {"error": response.json().get("detail", "The request was rejected by the research validator.")}
         except ValueError:
@@ -259,6 +286,93 @@ def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> d
     except Exception as error:
         detail = getattr(error, "detail", str(error))
         return {"error": str(detail)}
+
+
+def _strip_math_delimiters(formula: str) -> str:
+    """Strip outer math delimiters ($...$, $$...$$, \\[...\\], \\(...\\)) for st.latex and LaTeX blocks."""
+    s = str(formula).strip()
+    changed = True
+    while changed and s:
+        changed = False
+        for left, right in (("$$", "$$"), ("$", "$"), (r"\[", r"\]"), (r"\(", r"\)")):
+            if len(s) > len(left) + len(right) and s.startswith(left) and s.endswith(right):
+                s = s[len(left):-len(right)].strip()
+                changed = True
+                break
+    return s
+
+
+_CODE_SPAN_RE = re.compile(r"(```[\s\S]*?```|`[^`\n]+`)")
+
+
+def _unwrap_math_code_blocks(text: str) -> str:
+    """Unwrap accidental code blocks/fences and de-indent lines containing LaTeX math so KaTeX renders them."""
+    def repl_fence(m: re.Match) -> str:
+        content = m.group(1).strip()
+        has_math = any(tok in content for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+        is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b|\bassert\b|====|----|Input\s*:|Output\s*:|torch\.|nn\.)", content))
+        if has_math and not is_code:
+            return f"\n\n{content}\n\n"
+        return m.group(0)
+
+    fenced_re = re.compile(r"```(?:[a-zA-Z0-9_-]+[ \t]*\r?\n)?([\s\S]*?)```")
+    text = fenced_re.sub(repl_fence, text)
+    text = re.sub(r"`(\$[^`\n]+\$)`", r"\1", text)
+
+    lines = text.split("\n")
+    in_code_block = False
+    cleaned_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            cleaned_lines.append(line)
+            continue
+        if not in_code_block:
+            match_indent = re.match(r"^(\s{4,}|\t+)(.*)", line)
+            if match_indent:
+                rest = match_indent.group(2)
+                has_math = any(tok in rest for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+                is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b)", rest))
+                if has_math and not is_code:
+                    cleaned_lines.append(rest)
+                    continue
+        cleaned_lines.append(line)
+
+    res = "\n".join(cleaned_lines)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+_HEADING_RE = re.compile(
+    r"^(\s*)(?:###\s+|####\s+|\*\*)?(\d+\.\d+(?:\.\d+)?\s+[A-Za-z][^\n*]+|\bAppendix\s+[A-Z]:\s+[^\n*]+)(?:\*\*)?\s*$",
+    re.MULTILINE,
+)
+
+
+def _normalize_markdown_headings(text: str) -> str:
+    """Ensure standalone subsection headings like 3.1, 3.2 have Markdown ### prefix and proper spacing."""
+    def repl(m: re.Match) -> str:
+        title = m.group(2).strip()
+        return f"\n\n### {title}\n\n"
+
+    parts = _CODE_SPAN_RE.split(str(text))
+    for idx in range(0, len(parts), 2):
+        parts[idx] = _HEADING_RE.sub(repl, parts[idx])
+    res = "".join(parts)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+def _normalize_markdown_math(text: str) -> str:
+    """Convert \\(...\\) and \\[...\\] outside code blocks to $...$ and $$...$$ for Streamlit KaTeX, and normalize headings."""
+    text = _unwrap_math_code_blocks(str(text))
+    text = _normalize_markdown_headings(text)
+    parts = _CODE_SPAN_RE.split(text)
+    for idx in range(0, len(parts), 2):
+        seg = parts[idx]
+        seg = re.sub(r"\\\[\s*(.*?)\s*\\\]", lambda m: f"\n$$\n{m.group(1).strip()}\n$$\n", seg, flags=re.DOTALL)
+        seg = re.sub(r"\\\(\s*(.*?)\s*\\\)", lambda m: f"${m.group(1).strip()}$", seg, flags=re.DOTALL)
+        parts[idx] = seg
+    return "".join(parts)
 
 
 def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
@@ -295,7 +409,7 @@ def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
         elif isinstance(default, str) and not isinstance(value, str):
             normalized[key] = str(value)
     normalized["keywords"] = [str(item) for item in normalized["keywords"]]
-    normalized["mathematical_formulas"] = [str(item) for item in normalized["mathematical_formulas"]]
+    normalized["mathematical_formulas"] = [_strip_math_delimiters(item) for item in normalized["mathematical_formulas"] if _strip_math_delimiters(item)]
     normalized["threats_to_validity"] = [str(item) for item in normalized["threats_to_validity"]]
     normalized["references"] = [str(item) for item in normalized["references"]]
     placeholder_patterns = [
@@ -312,7 +426,7 @@ def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
         if isinstance(value, str):
             for pattern in placeholder_patterns:
                 value = re.sub(pattern, "[công thức toán chưa được sinh]", value, flags=re.IGNORECASE)
-            normalized[key] = value
+            normalized[key] = _normalize_markdown_math(value)
     return normalized
 
 
@@ -359,14 +473,7 @@ def extract_baseline_metadata(text: str) -> dict[str, Any]:
 
 def extract_baseline_metadata_with_llm(text: str) -> dict[str, Any] | None:
     """Extract only facts accompanied by verbatim, checkable source snippets."""
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        try:
-            from dotenv import load_dotenv
-            load_dotenv(Path(__file__).resolve().with_name(".env"), override=False)
-        except ImportError:
-            pass
-        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key = _get_active_gemini_key()
     if not api_key:
         return None
     prompt = """Extract facts from this paper for a human-reviewed comparison. Return JSON only, using this schema:
@@ -583,14 +690,7 @@ def generate_baseline_review_notes(
     baseline: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, str]] | None:
     """Ask Gemini for concise comparison notes and keep only statements with source quotes."""
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        try:
-            from dotenv import load_dotenv
-            load_dotenv(Path(__file__).resolve().with_name(".env"), override=False)
-        except ImportError:
-            pass
-        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key = _get_active_gemini_key()
     if not api_key:
         return None
     baseline = baseline or {}
@@ -1144,18 +1244,15 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
         alignment=TA_RIGHT,
     )
 
-    def _safe_paragraph(text: str, style):
-        if not text:
-            return Spacer(1, 2)
+    def _safe_paragraph(markup: str, style: ParagraphStyle) -> Paragraph:
         try:
-            cleaned = clean_academic_inline_math(str(text))
-            return Paragraph(cleaned, style)
+            return Paragraph(markup, style)
         except Exception:
-            try:
-                escaped = escape(str(text)).replace("\n", "<br/>")
-                return Paragraph(escaped, style)
-            except Exception:
-                return Paragraph(str(text), style)
+            from html import unescape
+
+            plain = re.sub(r"<br\s*/?>", "\n", str(markup), flags=re.IGNORECASE)
+            plain = re.sub(r"</?(?:b|i|u|sub|sup|font|para)[^>]*>", "", plain, flags=re.IGNORECASE)
+            return Paragraph(escape(unescape(plain), quote=False).replace("\n", "<br/>"), style)
 
     def add_academic_text(content: str) -> None:
         for raw_block in content.split("\n\n"):
@@ -1188,11 +1285,17 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                 continue
 
             lines = block.splitlines()
-            if lines and lines[0].startswith("### "):
-                story.append(_safe_paragraph(escape(lines[0][4:]), h2_style))
+            raw_first = lines[0].strip() if lines else ""
+            if raw_first.startswith("### "):
+                story.append(_safe_paragraph(escape(raw_first[4:].strip()), h2_style))
                 block = "\n".join(lines[1:]).strip()
-            elif lines and lines[0].startswith("#### "):
-                story.append(_safe_paragraph(escape(lines[0][5:]), h3_style))
+            elif raw_first.startswith("#### "):
+                story.append(_safe_paragraph(escape(raw_first[5:].strip()), h3_style))
+                block = "\n".join(lines[1:]).strip()
+            elif re.match(r"^(?:\*\*)?(\d+\.\d+(?:\.\d+)?\s+[A-Za-z]|\bAppendix\s+[A-Z]:\s+[A-Za-z])", raw_first):
+                heading_title = raw_first.strip("*").strip()
+                target_style = h3_style if re.match(r"^\d+\.\d+\.\d+\s+", heading_title) else h2_style
+                story.append(_safe_paragraph(escape(heading_title), target_style))
                 block = "\n".join(lines[1:]).strip()
 
             if not block:
@@ -1225,7 +1328,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                             ]))
                             story.append(eq_tbl)
                         else:
-                            clean_text_eq = _clean_math_for_matplotlib(part_str)
+                            clean_text_eq = escape(_clean_math_for_matplotlib(part_str), quote=False)
                             eq_p = _safe_paragraph(f"<i>{clean_text_eq}</i>", ParagraphStyle("EqFallback", parent=body_style, alignment=TA_CENTER))
                             eq_tbl = Table([[eq_p, eq_label]], colWidths=[162 * mm, 16 * mm])
                             eq_tbl.setStyle(TableStyle([
@@ -1245,10 +1348,10 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                 for bline in block.splitlines():
                     bline = bline.strip()
                     if bline:
-                        clean_line = re.sub(r"^[-*â€¢]\s*", "â€¢ ", bline)
-                        story.append(_safe_paragraph(clean_line, bullet_style))
+                        clean_line = re.sub(r"^[-*•]\s*", "• ", bline)
+                        story.append(_safe_paragraph(clean_academic_inline_math(clean_line), bullet_style))
             else:
-                story.append(_safe_paragraph(block.replace("\n", "<br/>"), body_style))
+                story.append(_safe_paragraph(clean_academic_inline_math(block).replace("\n", "<br/>"), body_style))
 
     def add_academic_table(title: str, headers: list[str], rows: list[list[Any]], widths: list[float]) -> None:
         story.append(Paragraph(escape(title), table_caption))
@@ -1439,21 +1542,18 @@ def _math_formula(formula: str) -> str:
 
 
 def _clean_math_for_matplotlib(formula: str) -> str:
-    s = str(formula).strip()
+    s = _strip_math_delimiters(formula)
     s = s.replace(r"\qqad", r"\qquad")
     s = s.replace(r"\lVert", r"\Vert").replace(r"\rVert", r"\Vert")
     s = s.replace(r"\text{", r"\mathrm{")
-    if s.startswith("$$") and s.endswith("$$"):
-        s = s[2:-2].strip()
-    elif s.startswith("$") and s.endswith("$"):
-        s = s[1:-1].strip()
     if s.endswith("."):
         s = s[:-1].strip()
     return s
 
 
 def clean_academic_inline_math(text: str) -> str:
-    val = str(text)
+    # Escape raw XML/HTML special chars (<, >, &) first so expressions like x_{<t}, p < 0.05, or A & B never break ReportLab's Paragraph parser.
+    val = escape(str(text), quote=False)
     # Remove math delimiters \( and \)
     val = re.sub(r"\\\\\((.*?)\\\\\)", r"\1", val)
     val = re.sub(r"\\\((.*?)\\\)", r"\1", val)
@@ -2035,6 +2135,7 @@ def render_verified_datasets() -> None:
 
 
 def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
+    paper = sanitize_paper_data(paper)
     st.subheader("Luồng kiến trúc")
     flow_steps = [
         "Input data",
@@ -2053,7 +2154,9 @@ def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
     st.write(paper["methodology"])
     st.subheader("Mathematical Formulation")
     for formula in paper["mathematical_formulas"]:
-        st.latex(formula)
+        cleaned_formula = _strip_math_delimiters(formula)
+        if cleaned_formula:
+            st.latex(cleaned_formula)
     st.subheader(f"PyTorch Core: {plan['proposed_method']}")
     pytorch_code = """class TaskAwareBlock(nn.Module):
     def __init__(self, dim):
@@ -2204,11 +2307,19 @@ def render_artifacts() -> None:
 
 def render_review(review: dict[str, Any]) -> None:
     metrics = st.columns(4)
-    for column, label, key in zip(metrics, ("Tính mới","Độ chặt chẽ","Độ rõ ràng","Điểm tổng"), ("novelty_score","rigor_score","clarity_score","overall_score")):
+    for column, label, key in zip(
+        metrics,
+        ("Novelty (Tính mới)", "Rigor (Độ chặt chẽ)", "Clarity (Độ rõ ràng)", "Overall Score (Điểm tổng)"),
+        ("novelty_score", "rigor_score", "clarity_score", "overall_score"),
+    ):
         column.metric(label, f"{review[key]:.1f} / 10")
-    st.markdown(f"<div class='callout'><strong>Đánh giá: {review['verdict']}</strong></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='callout'><strong>Verdict (Đánh giá): {escape(str(review['verdict']))}</strong></div>", unsafe_allow_html=True)
     columns = st.columns(3)
-    for column, title, key in zip(columns, ("✅ Điểm mạnh","⚠️ Điểm yếu","🛠️ Đề xuất sửa"), ("strengths","weaknesses","revision_suggestions")):
+    for column, title, key in zip(
+        columns,
+        ("✅ Strengths (Điểm mạnh)", "⚠️ Weaknesses (Điểm yếu)", "🛠️ Suggested Revisions (Đề xuất sửa)"),
+        ("strengths", "weaknesses", "revision_suggestions"),
+    ):
         with column:
             st.subheader(title)
             for item in review[key]:
@@ -2266,6 +2377,8 @@ def main() -> None:
         "baseline_pdf_text": "",
         "baseline_pdf_signature": None,
         "baseline_comparison_token": None,
+        "gemini_api_key": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "",
+        "gemini_model": os.getenv("GEMINI_MODEL") or "gemini-3.8-flash",
         "paper_chat_history": [],
     }.items():
         st.session_state.setdefault(key, value)
@@ -2281,42 +2394,51 @@ def main() -> None:
         st.session_state["constraints"] = ""
     with st.sidebar:
         st.markdown("## Bảng điều khiển nghiên cứu")
-        default_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
-        st.session_state.setdefault("user_gemini_api_key", default_api_key)
-        entered_api_key = st.text_input(
-            "🔑 Gemini API Key",
-            key="user_gemini_api_key",
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+        except Exception:
+            pass
+        env_gemini_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+        entered_key = st.text_input(
+            "🔑 Gemini API Key (tùy chọn)",
+            value="",
+            placeholder="Đang dùng key từ file .env" if env_gemini_key else "Dán API Key vào đây (hoặc đặt trong .env)",
             type="password",
-            placeholder="AIzaSy... (hoặc lấy từ .env)",
-            help="Nhập trực tiếp Gemini API Key tại đây để kích hoạt chế độ Live Planner & Writer.",
-        ).strip()
-        if entered_api_key:
-            if os.environ.get("GEMINI_API_KEY") != entered_api_key:
-                os.environ["GEMINI_API_KEY"] = entered_api_key
+            key="gemini_api_key_input",
+            help="Dán Google Gemini API Key để kích hoạt Gemini Live Mode. Nếu để trống, hệ thống tự động đọc key từ file .env (nếu có) hoặc chạy Dynamic Fallback.",
+        )
+        effective_key = entered_key.strip() or env_gemini_key
+        st.session_state["gemini_api_key"] = effective_key
+        if effective_key:
+            if os.environ.get("GEMINI_API_KEY") != effective_key:
+                os.environ["GEMINI_API_KEY"] = effective_key
                 try:
                     from backend.main import _EXHAUSTED_MODELS
                     _EXHAUSTED_MODELS.clear()
                 except Exception:
                     pass
-            st.caption("✅ Đã kết nối Gemini API Key")
+            model_choices = [
+                "gemini-3.8-flash",
+                "gemini-3.6-flash",
+                "gemini-3.7-flash",
+                "gemini-3.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-3.1-flash-lite",
+            ]
+            selected_model = st.selectbox(
+                "🤖 Chọn Gemini Model (ưu tiên trước)",
+                model_choices,
+                index=0,
+                key="gemini_model_selector",
+                help="Chọn mô hình Gemini ưu tiên; hệ thống tự động chuyển sang model dự phòng nếu model chính quá tải hoặc hết quota.",
+            )
+            st.session_state["gemini_model"] = selected_model
+            os.environ["GEMINI_MODEL"] = selected_model
+            source_note = "từ ô nhập" if entered_key.strip() else "từ file .env"
+            st.caption(f"🟢 **Live Gemini ({selected_model})** — Key {source_note}")
         else:
-            st.caption("⚠️ Chưa nhập API Key (Chế độ mô phỏng)")
-        model_choices = [
-            "gemini-3.6-flash",
-            "gemini-3.8-flash",
-            "gemini-3.7-flash",
-            "gemini-3.5-flash",
-            "gemini-3.5-flash-lite",
-            "gemini-3.1-flash-lite",
-        ]
-        current_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-        selected_model = st.selectbox(
-            "🤖 Mô hình Gemini ưu tiên",
-            model_choices,
-            index=model_choices.index(current_model) if current_model in model_choices else 0,
-            help="Tự động chuyển đổi dự phòng (auto-failover) nếu model đạt giới hạn quota.",
-        )
-        os.environ["GEMINI_MODEL"] = selected_model
+            st.caption("⚪ **Dynamic Fallback** — Chưa có API Key")
         st.selectbox("⚡ Chủ đề mẫu", [*PRESETS, CUSTOM], key="preset", on_change=apply_preset)
         st.text_area("Chủ đề nghiên cứu", key="topic", height=90)
         st.text_input("Lĩnh vực", key="domain")
@@ -2383,12 +2505,26 @@ def main() -> None:
             st.session_state.paper_question_answered = ""
             gc.collect()
             status.update(label="✅ Pipeline completed · manuscript ready", state="complete", expanded=False)
-    result = st.session_state["full_pipeline_result"]
+    result = st.session_state.get("full_pipeline_result")
+    if not result:
+        active_model = st.session_state.get("gemini_model") or "Dynamic Fallback"
+        mode_badge = f"Live Gemini · {active_model}" if st.session_state.get("gemini_api_key") else "Dynamic Fallback"
+        st.markdown(
+            "<section class='hero'>"
+            "<h1>Smart Research Lab · Hệ thống viết bài báo khoa học tự động</h1>"
+            "<p>Sẵn sàng điều phối Planner, Researcher, Writer và Reviewer theo chủ đề bạn chọn.</p>"
+            f"<span class='domain-badge'>{escape(mode_badge)}</span>"
+            "</section>",
+            unsafe_allow_html=True,
+        )
+        if compare_clicked:
+            st.info("Vui lòng bấm **🚀 Bắt đầu sinh bài báo** trước để tạo bài mới rồi mới đối chiếu với PDF gốc.")
+        st.info(
+            "👈 Kiểm tra API Key, model Gemini và nhập **Chủ đề nghiên cứu** ở thanh bên trái, sau đó bấm **🚀 Bắt đầu sinh bài báo** để bắt đầu."
+        )
+        return
     baseline_metadata = st.session_state.get("baseline_metadata")
     baseline_text = st.session_state.get("baseline_pdf_text", "")
-    if not result:
-        st.warning("Không có kết quả pipeline để hiển thị. Vui lòng chạy lại pipeline.")
-        st.stop()
     needs_initial_pipeline = bool(result and baseline_metadata and not st.session_state.get("baseline_comparison_token"))
     should_compare = bool(compare_clicked or run_clicked or needs_initial_pipeline)
     if baseline_metadata and result and should_compare:

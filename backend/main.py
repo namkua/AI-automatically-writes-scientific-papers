@@ -12,6 +12,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from dotenv import load_dotenv
+    _repo_root = Path(__file__).resolve().parent.parent
+    load_dotenv(_repo_root / ".env", override=False)
+    load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+except Exception:
+    pass
+
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -48,7 +56,7 @@ Meta AI) publishing at ICLR, NeurIPS, or IEEE TPAMI.
 
 TOPIC: "{sanitized_topic}"
 
-CORE MANDATE â€” EXPLICIT PROPOSED IDEA:
+CORE MANDATE — EXPLICIT PROPOSED IDEA:
 1. Introduce one distinct, topic-appropriate Proposed Method rather than merely
    summarizing prior work. Give it a concise name and define its mechanism,
    inputs, outputs, training or inference behavior, and intended trade-off.
@@ -85,44 +93,45 @@ WRITING AND EVIDENCE PRINCIPLES:
    "in this section", "it is worth noting", or "the results clearly
    demonstrate". Every paragraph must add a distinct technical observation,
    design trade-off, limitation, or reproducibility detail.
-7. Write in formal academic English with these required sections and rich subsections:
+7. Write in formal academic English with these required sections and rich subsections.
+   Prefix EVERY subsection heading with Markdown H3 ('### X.Y Heading Title') so it renders with academic heading typography:
    - Abstract & Keywords
    - Section 1. Introduction:
-     * 1.1 Context and Technical Bottleneck (3 substantial paragraphs)
-     * 1.2 Limitations of Current Methods (2 substantial paragraphs)
-     * 1.3 Key Contributions (Enumerate 4 explicit, numbered structural/algorithmic contributions)
-     * 1.4 Paper Organization (1 paragraph roadmap)
+     * ### 1.1 Context and Technical Bottleneck (3 substantial paragraphs)
+     * ### 1.2 Limitations of Current Methods (2 substantial paragraphs)
+     * ### 1.3 Key Contributions (Enumerate 4 explicit, numbered structural/algorithmic contributions)
+     * ### 1.4 Paper Organization (1 paragraph roadmap)
    - Section 2. Related Work:
-     * 2.1 Foundational Architectures & Representation Learning
-     * 2.2 Efficiency, Sparsity, and Dynamic Computation
-     * 2.3 Calibration, Uncertainty, and Robustness Protocols
-     * 2.4 Domain-Specific Innovations & Context Management
-     * 2.5 Critical Research Gap & Formal Hypothesis (explicit contrast against baselines)
+     * ### 2.1 Foundational Architectures & Representation Learning
+     * ### 2.2 Efficiency, Sparsity, and Dynamic Computation
+     * ### 2.3 Calibration, Uncertainty, and Robustness Protocols
+     * ### 2.4 Domain-Specific Innovations & Context Management
+     * ### 2.5 Critical Research Gap & Formal Hypothesis (explicit contrast against baselines)
    - Section 3. Proposed Methodology:
-     * 3.1 Problem Definition, Mathematical Notation, and Tensor Dimensions
-     * 3.2 Architectural Formulation & Routing Mechanism (with explicit mathematical formulas)
-     * 3.3 End-to-End Joint Loss Function & Optimization Dynamics
-     * 3.4 Algorithm 1: Procedural Execution and Dataflow Logic (explicit pseudocode block)
-     * 3.5 Theoretical Complexity, IO Bounds, and Memory Analysis
-     * 3.6 Implementation & Accelerator Optimization Nuances
+     * ### 3.1 Problem Definition, Mathematical Notation, and Tensor Dimensions
+     * ### 3.2 Architectural Formulation & Routing Mechanism (with explicit mathematical formulas)
+     * ### 3.3 End-to-End Joint Loss Function & Optimization Dynamics
+     * ### 3.4 Algorithm 1: Procedural Execution and Dataflow Logic (explicit pseudocode block)
+     * ### 3.5 Theoretical Complexity, IO Bounds, and Memory Analysis
+     * ### 3.6 Implementation & Accelerator Optimization Nuances
    - Section 4. Experiments & Comparative Evaluation:
-     * 4.1 Benchmark Suites & Dataset Characteristics
-     * 4.2 Baselines, Hyperparameters & Experimental Setup
-     * 4.3 Main Comparative Evaluation (metric-aware, detailed narrative)
-     * 4.4 In-Depth Component Ablation Study (isolating each component with causal mechanisms)
-     * 4.5 Training Dynamics, Convergence & Sensitivity Sweeps
-     * 4.6 Statistical Reliability, Failure Case Distribution & Error Breakdown
+     * ### 4.1 Benchmark Suites & Dataset Characteristics
+     * ### 4.2 Baselines, Hyperparameters & Experimental Setup
+     * ### 4.3 Main Comparative Evaluation (metric-aware, detailed narrative)
+     * ### 4.4 In-Depth Component Ablation Study (isolating each component with causal mechanisms)
+     * ### 4.5 Training Dynamics, Convergence & Sensitivity Sweeps
+     * ### 4.6 Statistical Reliability, Failure Case Distribution & Error Breakdown
    - Section 5. Discussion & Broader Impact:
-     * 5.1 Trade-off Spectrum: Compute vs. Latency vs. Accuracy
-     * 5.2 Failure Modes, Worst-Case Behaviors & Boundary Conditions
-     * 5.3 Scalability, Quantization & Edge Deployment Bottlenecks
-     * 5.4 Broader Impact & Ethical Considerations
+     * ### 5.1 Trade-off Spectrum: Compute vs. Latency vs. Accuracy
+     * ### 5.2 Failure Modes, Worst-Case Behaviors & Boundary Conditions
+     * ### 5.3 Scalability, Quantization & Edge Deployment Bottlenecks
+     * ### 5.4 Broader Impact & Ethical Considerations
    - Section 6. Threats to Validity (Construct, Internal, External, Hardware, Data, and Evidence validity)
    - Section 7. Conclusion & Future Directions
    - Section 8. Appendix:
-     * Appendix A: Detailed Hyperparameter Schedules & Optimizer Specifications
-     * Appendix B: Accelerator Specifications & Compute Budget Analysis
-     * Appendix C: Supplementary Sensitivity Sweeps
+     * ### Appendix A: Detailed Hyperparameter Schedules & Optimizer Specifications
+     * ### Appendix B: Accelerator Specifications & Compute Budget Analysis
+     * ### Appendix C: Supplementary Sensitivity Sweeps
    - References (12-16 verifiable seminal papers)
 8. In Section 3, define tensor/vector/matrix shapes and symbols, give explicit
    Input -> preprocessing -> forward pass -> output pseudo-logic, and explain
@@ -130,6 +139,24 @@ WRITING AND EVIDENCE PRINCIPLES:
    complexity for the actual domain and accelerator constraints; do not claim
    O(N log N) or O(N) unless the algorithm and assumptions justify it. Include
    a clean textual representation of "Algorithm 1: [Method Name] Forward and Backward Pipeline".
+8a. Algorithm 1 and Pseudocode Formatting:
+   - For Algorithm 1 in Section 3.4, format it as a single cohesive ASCII algorithm box inside a single code fence (```...```) like the standard template:
+     ```
+     ================================================================================
+     Algorithm 1: [Method Name] Forward and Optimization Execution Pipeline
+     ================================================================================
+     Input  : Mini-batch tensor X in R^(B x L x D), context query q in R^(B x D_q)
+     Output : Predictive tensor Y_hat, uncertainty score U, sparsity ratio S
+     --------------------------------------------------------------------------------
+      1: Initialize intermediate activations H = LayerNorm(LinearProjection(X))
+      2: Compute raw routing affinities a = W_g * c + U_g * q + b_g
+      3: Apply continuous sigmoid activation: g = sigma(a)
+      4: return Y_hat, U, S
+     ================================================================================
+     ```
+   - Never wrap individual 1-line steps in separate code boxes (```).
+   - Inside code fences (```...```), use pure ASCII/pseudocode text. DO NOT put LaTeX delimiters ($...$, $$...$$) or LaTeX commands (\\cdot, \\frac) inside code fences because code blocks cannot render LaTeX.
+   - If writing steps with LaTeX formulas ($...$), place them outside code fences as a regular numbered list (1. ..., 2. ...).
 9. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
    a gating/routing rule, a joint regularized loss, and optionally one
    complexity expression. Define symbols near first use. Replace algebra
@@ -832,8 +859,8 @@ def _make_model_catalog(topic: str, domain: str | None) -> list[ModelSpec]:
 
 _EXHAUSTED_MODELS: set[str] = set()
 _CANDIDATE_MODELS = (
-    "gemini-3.6-flash",
     "gemini-3.8-flash",
+    "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
@@ -845,7 +872,7 @@ def _get_candidate_models(preferred: str | None = None) -> list[str]:
     base = list(_CANDIDATE_MODELS)
     if preferred:
         clean_pref = preferred.removeprefix("models/").strip()
-        if clean_pref in base:
+        if clean_pref:
             base = [clean_pref] + [m for m in base if m != clean_pref]
     return base
 
@@ -862,46 +889,52 @@ def _safe_repair_truncated_json(raw: str) -> dict[str, Any] | None:
         if match:
             val = match.group(1)
             try:
-                result[field] = json.loads(f'"{val}"')
+                result[field] = json.loads(f'"{val}"', strict=False)
             except Exception:
                 result[field] = val.replace(r"\n", "\n").replace(r'\"', '"')
     return result if len(result) >= 3 else None
 
 
-def _parse_json_lenient(raw_text: str) -> Any:
-    cleaned = raw_text.strip()
+def safe_json_loads(text: str) -> Any | None:
+    cleaned = (text or "").strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.DOTALL).strip()
     try:
-        return json.loads(cleaned)
+        return json.loads(cleaned, strict=False)
     except json.JSONDecodeError:
         fixed = re.sub(r'\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})', r"\\\\", cleaned)
         try:
-            return json.loads(fixed)
+            return json.loads(fixed, strict=False)
         except json.JSONDecodeError:
-            repaired = _safe_repair_truncated_json(cleaned)
-            if repaired is not None:
-                return repaired
-            raise
+            return _safe_repair_truncated_json(cleaned)
 
 
-def _safe_live_call(api_key: str | None, prompt: str, response_schema: Any | None = None) -> Any | None:
+def _safe_live_call(
+    api_key: str | None,
+    prompt: str,
+    max_tokens: int = 32768,
+    model: str | None = None,
+    response_schema: Any | None = None,
+) -> Any | None:
     if not api_key:
         return None
     try:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=api_key)
-        preferred_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        timeout_ms = 45000 if max_tokens <= 8192 else 110000
+        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_ms))
+        preferred_model = (model or os.getenv("GEMINI_MODEL", "")).strip()
         candidates = _get_candidate_models(preferred_model)
         active_candidates = [m for m in candidates if m not in _EXHAUSTED_MODELS] or candidates
+
         for model_name in active_candidates:
             try:
+                print(f"[LiveGemini] Trying model={model_name} (max_tokens={max_tokens})...", flush=True)
                 cfg_kwargs: dict[str, Any] = {
                     "temperature": 0.3,
                     "response_mime_type": "application/json",
-                    "max_output_tokens": 32768,
+                    "max_output_tokens": max_tokens,
                 }
                 if response_schema is not None:
                     cfg_kwargs["response_schema"] = response_schema
@@ -913,20 +946,28 @@ def _safe_live_call(api_key: str | None, prompt: str, response_schema: Any | Non
                 parsed = getattr(response, "parsed", None)
                 if parsed is not None:
                     if hasattr(parsed, "model_dump"):
+                        print(f"[LiveGemini] Success (parsed) with model={model_name}", flush=True)
                         return parsed.model_dump()
                     if isinstance(parsed, dict):
+                        print(f"[LiveGemini] Success (parsed dict) with model={model_name}", flush=True)
                         return parsed
                 text = getattr(response, "text", None)
                 if text:
-                    return _parse_json_lenient(text)
+                    loaded = safe_json_loads(text)
+                    if loaded is not None:
+                        print(f"[LiveGemini] Success with model={model_name}, chars={len(text)}", flush=True)
+                        return loaded
+                    print(f"[LiveGemini] safe_json_loads returned None for model={model_name}", flush=True)
             except Exception as err:
                 err_str = str(err)
-                if any(code in err_str for code in ("NOT_FOUND", "404", "RESOURCE_EXHAUSTED", "429", "UNAVAILABLE", "503")):
+                print(f"[LiveGemini] Model={model_name} error: {type(err).__name__}: {err}", flush=True)
+                # Only skip models that are missing or out of daily quota; keep transient 503/504 models eligible.
+                if any(code in err_str for code in ("NOT_FOUND", "404", "RESOURCE_EXHAUSTED", "429")):
                     _EXHAUSTED_MODELS.add(model_name)
-                    continue
                 continue
         return None
-    except Exception:
+    except Exception as err:
+        print(f"[LiveGemini] Outer error: {type(err).__name__}: {err}", flush=True)
         return None
 
 
@@ -1233,8 +1274,95 @@ def sanitize_math_placeholders(text: str) -> str:
     return value
 
 
+def _strip_math_delimiters(formula: str) -> str:
+    """Loại bỏ ký tự bao toán học ngoài ($...$, $$...$$, \\[...\\], \\(...\\)) để st.latex / LaTeX block không bị lỗi."""
+    s = str(formula).strip()
+    changed = True
+    while changed and s:
+        changed = False
+        for left, right in (("$$", "$$"), ("$", "$"), (r"\[", r"\]"), (r"\(", r"\)")):
+            if len(s) > len(left) + len(right) and s.startswith(left) and s.endswith(right):
+                s = s[len(left):-len(right)].strip()
+                changed = True
+                break
+    return s
+
+
+_CODE_SPAN_RE = re.compile(r"(```[\s\S]*?```|`[^`\n]+`)")
+
+
+def _unwrap_math_code_blocks(text: str) -> str:
+    """Gỡ code block/fence hoặc bỏ thụt dòng với các bước mô tả chứa công thức LaTeX để KaTeX render được."""
+    def repl_fence(m: re.Match) -> str:
+        content = m.group(1).strip()
+        has_math = any(tok in content for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+        is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b|\bassert\b|====|----|Input\s*:|Output\s*:|torch\.|nn\.)", content))
+        if has_math and not is_code:
+            return f"\n\n{content}\n\n"
+        return m.group(0)
+
+    fenced_re = re.compile(r"```(?:[a-zA-Z0-9_-]+[ \t]*\r?\n)?([\s\S]*?)```")
+    text = fenced_re.sub(repl_fence, text)
+    text = re.sub(r"`(\$[^`\n]+\$)`", r"\1", text)
+
+    lines = text.split("\n")
+    in_code_block = False
+    cleaned_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            cleaned_lines.append(line)
+            continue
+        if not in_code_block:
+            match_indent = re.match(r"^(\s{4,}|\t+)(.*)", line)
+            if match_indent:
+                rest = match_indent.group(2)
+                has_math = any(tok in rest for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+                is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b)", rest))
+                if has_math and not is_code:
+                    cleaned_lines.append(rest)
+                    continue
+        cleaned_lines.append(line)
+
+    res = "\n".join(cleaned_lines)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+_HEADING_RE = re.compile(
+    r"^(\s*)(?:###\s+|####\s+|\*\*)?(\d+\.\d+(?:\.\d+)?\s+[A-Za-z][^\n*]+|\bAppendix\s+[A-Z]:\s+[^\n*]+)(?:\*\*)?\s*$",
+    re.MULTILINE,
+)
+
+
+def _normalize_markdown_headings(text: str) -> str:
+    """Đảm bảo các đề mục con như 3.1, 3.2 có tiền tố Markdown ### và khoảng cách dòng chuẩn."""
+    def repl(m: re.Match) -> str:
+        title = m.group(2).strip()
+        return f"\n\n### {title}\n\n"
+
+    parts = _CODE_SPAN_RE.split(str(text))
+    for idx in range(0, len(parts), 2):
+        parts[idx] = _HEADING_RE.sub(repl, parts[idx])
+    res = "".join(parts)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+def _normalize_markdown_math(text: str) -> str:
+    """Chuyển \\(...\\) và \\[...\\] ngoài code block sang $...$ và $$...$$ để Streamlit KaTeX render đúng, đồng thời chuẩn hóa đề mục con."""
+    text = _unwrap_math_code_blocks(str(text))
+    text = _normalize_markdown_headings(text)
+    parts = _CODE_SPAN_RE.split(text)
+    for idx in range(0, len(parts), 2):
+        seg = parts[idx]
+        seg = re.sub(r"\\\[\s*(.*?)\s*\\\]", lambda m: f"\n$$\n{m.group(1).strip()}\n$$\n", seg, flags=re.DOTALL)
+        seg = re.sub(r"\\\(\s*(.*?)\s*\\\)", lambda m: f"${m.group(1).strip()}$", seg, flags=re.DOTALL)
+        parts[idx] = seg
+    return "".join(parts)
+
+
 def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
-    """Áp dụng sanitize placeholder lên các trường văn bản của WriterOutput trước khi trả về UI."""
+    """Áp dụng sanitize placeholder và chuẩn hóa công thức Markdown trên các trường văn bản của WriterOutput."""
     text_fields = (
         "abstract", "introduction", "related_work", "methodology",
         "experimental_results", "discussion", "conclusion",
@@ -1243,7 +1371,9 @@ def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
     for field in text_fields:
         value = data.get(field, "")
         if isinstance(value, str):
-            data[field] = sanitize_math_placeholders(value)
+            data[field] = _normalize_markdown_math(sanitize_math_placeholders(value))
+    formulas = data.get("mathematical_formulas") or []
+    data["mathematical_formulas"] = [_strip_math_delimiters(f) for f in formulas if _strip_math_delimiters(f)] or ["y = f(x)"]
     return WriterOutput(**data)
 
 
@@ -1482,7 +1612,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             "active token count to \\(k = \\rho L\\), where \\(\\rho \\in (0, 1]\\) denotes the empirical retention density (typically \\(\\rho \\approx 0.35\\)). "
             "The operational complexity is thus bounded by:\n"
             "$$\\operatorname{Cost}_{proposed} = \\mathcal{O}(B \\cdot L \\cdot D + B \\cdot k \\cdot L \\cdot D) = \\mathcal{O}(B \\cdot L \\cdot D + B \\cdot \\rho L^2 D) \\text{ FLOPs}.$$\n"
-            "From a memory-bandwidth perspective, DRAM transfer volume is reduced by approximately \\((1 - \\rho^2) \\times 100\\%,\\) mitigating "
+            "From a memory-bandwidth perspective, DRAM transfer volume is reduced by approximately \\((1 - \\rho^2) \\times 100\\%\\), mitigating "
             "SRAM cache thrashing and yielding substantial wall-clock latency reductions on tensor accelerators.\n\n"
             "### 3.6 Implementation & Accelerator Optimization Nuances\n"
             f"The reference implementation is authored in Python 3.11 utilizing PyTorch 2.14 and CUDA 12.1. "
@@ -1692,7 +1822,70 @@ def _answer_paper_question(question: str, paper: WriterOutput, research: Researc
     return f"This paper studies {paper.title}. Its central claim is that a topic-aware design can improve the target task while keeping robustness and deployment cost visible. Ask about the baseline comparison, datasets, method, results, or limitations for a more specific answer."
 
 
-def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, constraints: str | None, api_key: str | None) -> PlannerOutput | None:
+def _normalize_planner_payload(payload: dict[str, Any], topic: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    for ds in payload.get("datasets_catalog", []):
+        if isinstance(ds, dict):
+            ds["sample_size"] = str(ds.get("sample_size", "10,000 samples"))
+    has_proposed = False
+    for m in payload.get("models_catalog", []):
+        if isinstance(m, dict):
+            raw_role = str(m.get("role", "")).strip().capitalize()
+            if "propos" in raw_role.lower():
+                m["role"] = "Proposed"
+                has_proposed = True
+            elif raw_role == "Baseline":
+                m["role"] = "Baseline"
+            else:
+                m["role"] = "Baseline"
+            for num_field, default_val in [("params_m", 125.0), ("flops_g", 15.0), ("latency_ms", 28.0), ("vram_mb", 512.0)]:
+                v = m.get(num_field)
+                if not isinstance(v, (int, float)):
+                    match = re.findall(r"[-+]?\d*\.\d+|\d+", str(v))
+                    m[num_field] = float(match[0]) if match else default_val
+                else:
+                    m[num_field] = float(v)
+    if payload.get("models_catalog") and not has_proposed:
+        payload["models_catalog"][-1]["role"] = "Proposed"
+    for list_key in ("baseline_methods", "evaluation_metrics", "experimental_plan", "report_outline"):
+        val = payload.get(list_key)
+        if isinstance(val, str):
+            payload[list_key] = [s.strip() for s in val.split("\n") if s.strip()]
+        elif not isinstance(val, list) or not val:
+            payload[list_key] = [f"Standard {list_key.replace('_', ' ')} protocol"]
+        else:
+            payload[list_key] = [str(x) for x in val]
+    return payload
+
+
+def _normalize_writer_payload(payload: dict[str, Any], plan: PlannerOutput) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    if not payload.get("title"):
+        payload["title"] = plan.title
+    for str_key in ("abstract", "introduction", "related_work", "methodology", "experimental_results", "discussion", "conclusion"):
+        val = payload.get(str_key)
+        if isinstance(val, dict):
+            payload[str_key] = "\n\n".join(f"### {k}\n{v}" for k, v in val.items())
+        elif isinstance(val, list):
+            payload[str_key] = "\n\n".join(str(x) for x in val)
+        elif not val:
+            payload[str_key] = f"Section {str_key} for {plan.title}."
+        else:
+            payload[str_key] = str(val)
+    for list_key in ("keywords", "mathematical_formulas", "threats_to_validity", "references"):
+        val = payload.get(list_key)
+        if isinstance(val, str):
+            payload[list_key] = [s.strip() for s in val.split("\n") if s.strip()]
+        elif not isinstance(val, list) or not val:
+            payload[list_key] = [f"Standard {list_key}"]
+        else:
+            payload[list_key] = [str(x) for x in val]
+    return payload
+
+
+def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, constraints: str | None, api_key: str | None, model: str | None = None) -> PlannerOutput | None:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
@@ -1706,64 +1899,21 @@ def _maybe_live_plan(topic: str, domain: str | None, objective: str | None, cons
             "evaluation_metrics:[str], experimental_plan:[str], report_outline:[str]}. "
             "IMPORTANT: In models_catalog, include at least 2 items with role='Baseline' and 1 item with role='Proposed'. "
             "Generate one original proposed method, not a baseline-comparison paper. "
+            "In models_catalog, role must be \"Baseline\" or \"Proposed\". params_m, flops_g, and latency_ms must be numeric floats. "
             f"Topic: {topic}; domain: {domain or 'AI research'}; objective: {objective or 'design a rigorous study'}; "
-            f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets and flag any unavailable measurements as planned experiments."
+            f"constraints: {constraints or 'none specified'}. Use real, recognizable public datasets."
         )
-        payload = _safe_live_call(key, prompt)
+        payload = _safe_live_call(key, prompt, max_tokens=8192, model=model)
         if not isinstance(payload, dict):
             return None
-        for item in payload.get("models_catalog") or []:
-            if isinstance(item, dict) and isinstance(item.get("role"), str):
-                role_lower = item["role"].strip().lower()
-                item["role"] = "Proposed" if "propose" in role_lower or "ours" in role_lower else "Baseline"
+        payload = _normalize_planner_payload(payload, topic)
         return PlannerOutput.model_validate(payload)
-    except Exception:
+    except Exception as err:
+        print(f"[LiveGemini] Planner validation failed: {type(err).__name__}: {err}", flush=True)
         return None
 
 
-def _normalize_writer_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    normalized = dict(payload)
-    aliases = {
-        "formulas": "mathematical_formulas",
-        "threats": "threats_to_validity",
-        "results": "experimental_results",
-    }
-    for source, target in aliases.items():
-        if target not in normalized and source in normalized:
-            normalized[target] = normalized[source]
-    str_fields = (
-        "title",
-        "abstract",
-        "introduction",
-        "related_work",
-        "methodology",
-        "experimental_results",
-        "discussion",
-        "conclusion",
-    )
-    list_fields = ("keywords", "mathematical_formulas", "threats_to_validity", "references")
-    for field in str_fields:
-        val = normalized.get(field)
-        if isinstance(val, dict):
-            normalized[field] = "\n\n".join(f"### {k}\n{v}" for k, v in val.items())
-        elif isinstance(val, list):
-            normalized[field] = "\n\n".join(str(x) for x in val)
-    for field in list_fields:
-        val = normalized.get(field)
-        if isinstance(val, str):
-            normalized[field] = [line.strip() for line in val.splitlines() if line.strip()] or [val]
-        elif isinstance(val, list):
-            items = []
-            for item in val:
-                if isinstance(item, dict):
-                    items.append(" - ".join(str(v) for v in item.values() if v))
-                else:
-                    items.append(str(item))
-            normalized[field] = items
-    return normalized
-
-
-def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key: str | None) -> WriterOutput | None:
+def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key: str | None, model: str | None = None) -> WriterOutput | None:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
@@ -1787,16 +1937,17 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         f"Knowledge Retrieval Precision: {research.knowledge_retrieval_precision}."
     )
     try:
-        payload = _safe_live_call(key, prompt, response_schema=WriterOutput)
+        payload = _safe_live_call(key, prompt, max_tokens=32768, model=model, response_schema=WriterOutput)
         if not isinstance(payload, dict):
             return None
-        normalized = _normalize_writer_payload(payload)
         fallback_dict = _build_synthesis_writer(plan, research).model_dump()
         for k, default_val in fallback_dict.items():
-            if not normalized.get(k):
-                normalized[k] = default_val
-        return WriterOutput.model_validate(normalized)
-    except Exception:
+            if not payload.get(k):
+                payload[k] = default_val
+        payload = _normalize_writer_payload(payload, plan)
+        return WriterOutput.model_validate(payload)
+    except Exception as err:
+        print(f"[LiveGemini] Writer validation failed: {type(err).__name__}: {err}", flush=True)
         return None
 
 
@@ -1806,15 +1957,23 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     objective = request.objective or "Design a rigorous, reproducible, and evidence-driven study."
     if request.require_verified_data:
         _validate_verified_request(topic, request.domain, request.objective)
+    if not request.api_key:
+        try:
+            from dotenv import load_dotenv
+            _root = Path(__file__).resolve().parent.parent
+            load_dotenv(_root / ".env", override=True)
+        except Exception:
+            pass
     api_key = request.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    plan = _maybe_live_plan(topic, domain, objective, request.constraints, api_key)
+    model = request.model or os.getenv("GEMINI_MODEL") or None
+    plan = _maybe_live_plan(topic, domain, objective, request.constraints, api_key, model=model)
     mode_used = "live_gemini" if plan is not None else "dynamic_fallback"
     if plan is None:
         plan = _build_dynamic_planner(topic, domain, objective)
     plan = _ensure_system_intelligence(plan, topic, domain, objective)
     research = _build_dynamic_research(plan)
     _validate_research_contract(plan, research)
-    live_paper = _maybe_live_writer(plan, research, api_key)
+    live_paper = _maybe_live_writer(plan, research, api_key, model=model)
     paper = live_paper or _build_synthesis_writer(plan, research)
     paper = sanitize_writer_output(paper)
     paper = _ensure_gap_and_proposal_sections(paper, plan)
