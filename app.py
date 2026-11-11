@@ -121,7 +121,8 @@ div[data-baseweb="radio"] input{display:none!important}
 [data-testid="stImage"],[data-testid="stImage"]>div,[data-testid="stImage"] img{width:100%!important;max-width:100%!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important}
 [data-testid="stImage"]{margin:0 0 1rem!important}
 [data-testid="stDataFrame"]>div{overflow-x:auto!important}
-[data-testid="stMarkdownContainer"] .katex-display,[data-testid="stMarkdownContainer"] .katex{background:var(--code)!important;color:var(--ink)!important;padding:.45rem .65rem;border-radius:8px;overflow-x:auto}
+[data-testid="stMarkdownContainer"] .katex-display{background:var(--code)!important;color:var(--ink)!important;padding:.6rem .9rem;border-radius:10px;margin:.6rem 0;overflow-x:auto}
+[data-testid="stMarkdownContainer"] .katex{background:transparent!important;color:var(--ink)!important;padding:0 .12rem}
 [data-testid="stExpander"]{border:1px solid var(--line);border-radius:12px;background:rgba(17,27,48,.48)}
 .artifact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
 .artifact-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem;min-width:0;overflow-wrap:anywhere}
@@ -131,7 +132,7 @@ div[data-baseweb="radio"] input{display:none!important}
 </style>
 <style>
 [data-testid="stMetric"]{min-width:0!important}
-[data-testid="stMetric"] label{white-space:nowrap!important;line-height:1.2!important;overflow:hidden!important;text-overflow:ellipsis!important}
+[data-testid="stMetric"] label{white-space:normal!important;line-height:1.25!important;overflow:visible!important}
 [data-testid="stMetric"] [data-testid="stMetricValue"]{white-space:nowrap!important}
 [data-testid="stMetric"] [data-testid="stMetricDelta"]{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 .architecture-flow{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;background:#262730;border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.25rem;margin:.35rem 0 1.15rem;box-shadow:0 12px 28px #0003}
@@ -162,7 +163,7 @@ div[data-testid="stCodeBlock"],div[data-testid="stCodeBlock"]>div,div[data-testi
 div[data-testid="stCodeBlock"] code,.stCodeBlock,.stCodeBlock>div,.stCodeBlock pre,.stCodeBlock code,
 [data-testid="stMarkdownContainer"] pre,[data-testid="stMarkdownContainer"] pre code,
 .architecture-code,.dataset-command{background:#1E1E1E!important;color:#FAFAFA!important}
-[data-testid="stMarkdownContainer"] pre{border:1px solid var(--line)!important;border-radius:12px!important;padding:1rem 1.15rem!important}
+[data-testid="stMarkdownContainer"] pre{border:1px solid var(--line)!important;border-radius:12px!important;padding:1rem 1.15rem!important;font-family:Consolas,"Courier New",monospace!important;font-size:.9rem!important;line-height:1.5!important;white-space:pre!important;overflow-x:auto!important}
 [data-testid="stDataFrame"],[data-testid="stDataFrame"]>div,.stDataFrame,.stTable{max-width:100%!important;overflow-x:auto!important}
 .chat-response{background:#262730!important;color:#FAFAFA!important;border:1px solid #363945!important;border-radius:8px;padding:1rem;margin-top:.75rem;line-height:1.55;overflow-wrap:anywhere}
 [data-testid="stSidebar"]{min-width:18rem;max-width:22rem}
@@ -301,6 +302,79 @@ def _strip_math_delimiters(formula: str) -> str:
     return s
 
 
+_CODE_SPAN_RE = re.compile(r"(```[\s\S]*?```|`[^`\n]+`)")
+
+
+def _unwrap_math_code_blocks(text: str) -> str:
+    """Unwrap accidental code blocks/fences and de-indent lines containing LaTeX math so KaTeX renders them."""
+    def repl_fence(m: re.Match) -> str:
+        content = m.group(1).strip()
+        has_math = any(tok in content for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+        is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b|\bassert\b|====|----|Input\s*:|Output\s*:|torch\.|nn\.)", content))
+        if has_math and not is_code:
+            return f"\n\n{content}\n\n"
+        return m.group(0)
+
+    fenced_re = re.compile(r"```(?:[a-zA-Z0-9_-]+[ \t]*\r?\n)?([\s\S]*?)```")
+    text = fenced_re.sub(repl_fence, text)
+    text = re.sub(r"`(\$[^`\n]+\$)`", r"\1", text)
+
+    lines = text.split("\n")
+    in_code_block = False
+    cleaned_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            cleaned_lines.append(line)
+            continue
+        if not in_code_block:
+            match_indent = re.match(r"^(\s{4,}|\t+)(.*)", line)
+            if match_indent:
+                rest = match_indent.group(2)
+                has_math = any(tok in rest for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+                is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b)", rest))
+                if has_math and not is_code:
+                    cleaned_lines.append(rest)
+                    continue
+        cleaned_lines.append(line)
+
+    res = "\n".join(cleaned_lines)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+_HEADING_RE = re.compile(
+    r"^(\s*)(?:###\s+|####\s+|\*\*)?(\d+\.\d+(?:\.\d+)?\s+[A-Za-z][^\n*]+|\bAppendix\s+[A-Z]:\s+[^\n*]+)(?:\*\*)?\s*$",
+    re.MULTILINE,
+)
+
+
+def _normalize_markdown_headings(text: str) -> str:
+    """Ensure standalone subsection headings like 3.1, 3.2 have Markdown ### prefix and proper spacing."""
+    def repl(m: re.Match) -> str:
+        title = m.group(2).strip()
+        return f"\n\n### {title}\n\n"
+
+    parts = _CODE_SPAN_RE.split(str(text))
+    for idx in range(0, len(parts), 2):
+        parts[idx] = _HEADING_RE.sub(repl, parts[idx])
+    res = "".join(parts)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+def _normalize_markdown_math(text: str) -> str:
+    """Convert \\(...\\) and \\[...\\] outside code blocks to $...$ and $$...$$ for Streamlit KaTeX, and normalize headings."""
+    text = _unwrap_math_code_blocks(str(text))
+    text = _normalize_markdown_headings(text)
+    parts = _CODE_SPAN_RE.split(text)
+    for idx in range(0, len(parts), 2):
+        seg = parts[idx]
+        seg = re.sub(r"\\\[\s*(.*?)\s*\\\]", lambda m: f"\n$$\n{m.group(1).strip()}\n$$\n", seg, flags=re.DOTALL)
+        seg = re.sub(r"\\\(\s*(.*?)\s*\\\)", lambda m: f"${m.group(1).strip()}$", seg, flags=re.DOTALL)
+        parts[idx] = seg
+    return "".join(parts)
+
+
 def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
     """Normalize provider output before any preview or export touches it."""
     normalized = dict(paper) if isinstance(paper, dict) else {}
@@ -352,7 +426,7 @@ def sanitize_paper_data(paper: dict[str, Any] | None) -> dict[str, Any]:
         if isinstance(value, str):
             for pattern in placeholder_patterns:
                 value = re.sub(pattern, "[công thức toán chưa được sinh]", value, flags=re.IGNORECASE)
-            normalized[key] = value
+            normalized[key] = _normalize_markdown_math(value)
     return normalized
 
 
@@ -1211,11 +1285,17 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any], chart_paths: lis
                 continue
 
             lines = block.splitlines()
-            if lines and lines[0].startswith("### "):
-                story.append(Paragraph(escape(lines[0][4:]), h2_style))
+            raw_first = lines[0].strip() if lines else ""
+            if raw_first.startswith("### "):
+                story.append(Paragraph(escape(raw_first[4:].strip()), h2_style))
                 block = "\n".join(lines[1:]).strip()
-            elif lines and lines[0].startswith("#### "):
-                story.append(Paragraph(escape(lines[0][5:]), h3_style))
+            elif raw_first.startswith("#### "):
+                story.append(Paragraph(escape(raw_first[5:].strip()), h3_style))
+                block = "\n".join(lines[1:]).strip()
+            elif re.match(r"^(?:\*\*)?(\d+\.\d+(?:\.\d+)?\s+[A-Za-z]|\bAppendix\s+[A-Z]:\s+[A-Za-z])", raw_first):
+                heading_title = raw_first.strip("*").strip()
+                target_style = h3_style if re.match(r"^\d+\.\d+\.\d+\s+", heading_title) else h2_style
+                story.append(Paragraph(escape(heading_title), target_style))
                 block = "\n".join(lines[1:]).strip()
 
             if not block:
@@ -2047,6 +2127,7 @@ def render_verified_datasets() -> None:
 
 
 def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
+    paper = sanitize_paper_data(paper)
     st.subheader("Luồng kiến trúc")
     flow_steps = [
         "Input data",
@@ -2218,11 +2299,19 @@ def render_artifacts() -> None:
 
 def render_review(review: dict[str, Any]) -> None:
     metrics = st.columns(4)
-    for column, label, key in zip(metrics, ("Tính mới","Độ chặt chẽ","Độ rõ ràng","Điểm tổng"), ("novelty_score","rigor_score","clarity_score","overall_score")):
+    for column, label, key in zip(
+        metrics,
+        ("Novelty (Tính mới)", "Rigor (Độ chặt chẽ)", "Clarity (Độ rõ ràng)", "Overall Score (Điểm tổng)"),
+        ("novelty_score", "rigor_score", "clarity_score", "overall_score"),
+    ):
         column.metric(label, f"{review[key]:.1f} / 10")
-    st.markdown(f"<div class='callout'><strong>Đánh giá: {review['verdict']}</strong></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='callout'><strong>Verdict (Đánh giá): {escape(str(review['verdict']))}</strong></div>", unsafe_allow_html=True)
     columns = st.columns(3)
-    for column, title, key in zip(columns, ("✅ Điểm mạnh","⚠️ Điểm yếu","🛠️ Đề xuất sửa"), ("strengths","weaknesses","revision_suggestions")):
+    for column, title, key in zip(
+        columns,
+        ("✅ Strengths (Điểm mạnh)", "⚠️ Weaknesses (Điểm yếu)", "🛠️ Suggested Revisions (Đề xuất sửa)"),
+        ("strengths", "weaknesses", "revision_suggestions"),
+    ):
         with column:
             st.subheader(title)
             for item in review[key]:
@@ -2413,7 +2502,7 @@ def main() -> None:
         if compare_clicked:
             st.info("Vui lòng bấm **🚀 Bắt đầu sinh bài báo** trước để tạo bài mới rồi mới đối chiếu với PDF gốc.")
         st.info(
-            "👈 Kiểm tra API Key, model Gemini và nhập **Chủ đề nghiên cứu** ở thanh bên trái, sau đó bấm **🚀 Bắt đầu sinh bài báo** để bắt đầu (hệ thống không tự chạy khi vừa mở hoặc tải lại trang)."
+            "👈 Kiểm tra API Key, model Gemini và nhập **Chủ đề nghiên cứu** ở thanh bên trái, sau đó bấm **🚀 Bắt đầu sinh bài báo** để bắt đầu."
         )
         return
     baseline_metadata = st.session_state.get("baseline_metadata")

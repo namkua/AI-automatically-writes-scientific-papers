@@ -92,44 +92,45 @@ WRITING AND EVIDENCE PRINCIPLES:
    "in this section", "it is worth noting", or "the results clearly
    demonstrate". Every paragraph must add a distinct technical observation,
    design trade-off, limitation, or reproducibility detail.
-7. Write in formal academic English with these required sections and rich subsections:
+7. Write in formal academic English with these required sections and rich subsections.
+   Prefix EVERY subsection heading with Markdown H3 ('### X.Y Heading Title') so it renders with academic heading typography:
    - Abstract & Keywords
    - Section 1. Introduction:
-     * 1.1 Context and Technical Bottleneck (3 substantial paragraphs)
-     * 1.2 Limitations of Current Methods (2 substantial paragraphs)
-     * 1.3 Key Contributions (Enumerate 4 explicit, numbered structural/algorithmic contributions)
-     * 1.4 Paper Organization (1 paragraph roadmap)
+     * ### 1.1 Context and Technical Bottleneck (3 substantial paragraphs)
+     * ### 1.2 Limitations of Current Methods (2 substantial paragraphs)
+     * ### 1.3 Key Contributions (Enumerate 4 explicit, numbered structural/algorithmic contributions)
+     * ### 1.4 Paper Organization (1 paragraph roadmap)
    - Section 2. Related Work:
-     * 2.1 Foundational Architectures & Representation Learning
-     * 2.2 Efficiency, Sparsity, and Dynamic Computation
-     * 2.3 Calibration, Uncertainty, and Robustness Protocols
-     * 2.4 Domain-Specific Innovations & Context Management
-     * 2.5 Critical Research Gap & Formal Hypothesis (explicit contrast against baselines)
+     * ### 2.1 Foundational Architectures & Representation Learning
+     * ### 2.2 Efficiency, Sparsity, and Dynamic Computation
+     * ### 2.3 Calibration, Uncertainty, and Robustness Protocols
+     * ### 2.4 Domain-Specific Innovations & Context Management
+     * ### 2.5 Critical Research Gap & Formal Hypothesis (explicit contrast against baselines)
    - Section 3. Proposed Methodology:
-     * 3.1 Problem Definition, Mathematical Notation, and Tensor Dimensions
-     * 3.2 Architectural Formulation & Routing Mechanism (with explicit mathematical formulas)
-     * 3.3 End-to-End Joint Loss Function & Optimization Dynamics
-     * 3.4 Algorithm 1: Procedural Execution and Dataflow Logic (explicit pseudocode block)
-     * 3.5 Theoretical Complexity, IO Bounds, and Memory Analysis
-     * 3.6 Implementation & Accelerator Optimization Nuances
+     * ### 3.1 Problem Definition, Mathematical Notation, and Tensor Dimensions
+     * ### 3.2 Architectural Formulation & Routing Mechanism (with explicit mathematical formulas)
+     * ### 3.3 End-to-End Joint Loss Function & Optimization Dynamics
+     * ### 3.4 Algorithm 1: Procedural Execution and Dataflow Logic (explicit pseudocode block)
+     * ### 3.5 Theoretical Complexity, IO Bounds, and Memory Analysis
+     * ### 3.6 Implementation & Accelerator Optimization Nuances
    - Section 4. Experiments & Comparative Evaluation:
-     * 4.1 Benchmark Suites & Dataset Characteristics
-     * 4.2 Baselines, Hyperparameters & Experimental Setup
-     * 4.3 Main Comparative Evaluation (metric-aware, detailed narrative)
-     * 4.4 In-Depth Component Ablation Study (isolating each component with causal mechanisms)
-     * 4.5 Training Dynamics, Convergence & Sensitivity Sweeps
-     * 4.6 Statistical Reliability, Failure Case Distribution & Error Breakdown
+     * ### 4.1 Benchmark Suites & Dataset Characteristics
+     * ### 4.2 Baselines, Hyperparameters & Experimental Setup
+     * ### 4.3 Main Comparative Evaluation (metric-aware, detailed narrative)
+     * ### 4.4 In-Depth Component Ablation Study (isolating each component with causal mechanisms)
+     * ### 4.5 Training Dynamics, Convergence & Sensitivity Sweeps
+     * ### 4.6 Statistical Reliability, Failure Case Distribution & Error Breakdown
    - Section 5. Discussion & Broader Impact:
-     * 5.1 Trade-off Spectrum: Compute vs. Latency vs. Accuracy
-     * 5.2 Failure Modes, Worst-Case Behaviors & Boundary Conditions
-     * 5.3 Scalability, Quantization & Edge Deployment Bottlenecks
-     * 5.4 Broader Impact & Ethical Considerations
+     * ### 5.1 Trade-off Spectrum: Compute vs. Latency vs. Accuracy
+     * ### 5.2 Failure Modes, Worst-Case Behaviors & Boundary Conditions
+     * ### 5.3 Scalability, Quantization & Edge Deployment Bottlenecks
+     * ### 5.4 Broader Impact & Ethical Considerations
    - Section 6. Threats to Validity (Construct, Internal, External, Hardware, Data, and Evidence validity)
    - Section 7. Conclusion & Future Directions
    - Section 8. Appendix:
-     * Appendix A: Detailed Hyperparameter Schedules & Optimizer Specifications
-     * Appendix B: Accelerator Specifications & Compute Budget Analysis
-     * Appendix C: Supplementary Sensitivity Sweeps
+     * ### Appendix A: Detailed Hyperparameter Schedules & Optimizer Specifications
+     * ### Appendix B: Accelerator Specifications & Compute Budget Analysis
+     * ### Appendix C: Supplementary Sensitivity Sweeps
    - References (12-16 verifiable seminal papers)
 8. In Section 3, define tensor/vector/matrix shapes and symbols, give explicit
    Input -> preprocessing -> forward pass -> output pseudo-logic, and explain
@@ -137,6 +138,24 @@ WRITING AND EVIDENCE PRINCIPLES:
    complexity for the actual domain and accelerator constraints; do not claim
    O(N log N) or O(N) unless the algorithm and assumptions justify it. Include
    a clean textual representation of "Algorithm 1: [Method Name] Forward and Backward Pipeline".
+8a. Algorithm 1 and Pseudocode Formatting:
+   - For Algorithm 1 in Section 3.4, format it as a single cohesive ASCII algorithm box inside a single code fence (```...```) like the standard template:
+     ```
+     ================================================================================
+     Algorithm 1: [Method Name] Forward and Optimization Execution Pipeline
+     ================================================================================
+     Input  : Mini-batch tensor X in R^(B x L x D), context query q in R^(B x D_q)
+     Output : Predictive tensor Y_hat, uncertainty score U, sparsity ratio S
+     --------------------------------------------------------------------------------
+      1: Initialize intermediate activations H = LayerNorm(LinearProjection(X))
+      2: Compute raw routing affinities a = W_g * c + U_g * q + b_g
+      3: Apply continuous sigmoid activation: g = sigma(a)
+      4: return Y_hat, U, S
+     ================================================================================
+     ```
+   - Never wrap individual 1-line steps in separate code boxes (```).
+   - Inside code fences (```...```), use pure ASCII/pseudocode text. DO NOT put LaTeX delimiters ($...$, $$...$$) or LaTeX commands (\\cdot, \\frac) inside code fences because code blocks cannot render LaTeX.
+   - If writing steps with LaTeX formulas ($...$), place them outside code fences as a regular numbered list (1. ..., 2. ...).
 9. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
    a gating/routing rule, a joint regularized loss, and optionally one
    complexity expression. Define symbols near first use. Replace algebra
@@ -1268,8 +1287,81 @@ def _strip_math_delimiters(formula: str) -> str:
     return s
 
 
+_CODE_SPAN_RE = re.compile(r"(```[\s\S]*?```|`[^`\n]+`)")
+
+
+def _unwrap_math_code_blocks(text: str) -> str:
+    """Gỡ code block/fence hoặc bỏ thụt dòng với các bước mô tả chứa công thức LaTeX để KaTeX render được."""
+    def repl_fence(m: re.Match) -> str:
+        content = m.group(1).strip()
+        has_math = any(tok in content for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+        is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b|\bassert\b|====|----|Input\s*:|Output\s*:|torch\.|nn\.)", content))
+        if has_math and not is_code:
+            return f"\n\n{content}\n\n"
+        return m.group(0)
+
+    fenced_re = re.compile(r"```(?:[a-zA-Z0-9_-]+[ \t]*\r?\n)?([\s\S]*?)```")
+    text = fenced_re.sub(repl_fence, text)
+    text = re.sub(r"`(\$[^`\n]+\$)`", r"\1", text)
+
+    lines = text.split("\n")
+    in_code_block = False
+    cleaned_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            cleaned_lines.append(line)
+            continue
+        if not in_code_block:
+            match_indent = re.match(r"^(\s{4,}|\t+)(.*)", line)
+            if match_indent:
+                rest = match_indent.group(2)
+                has_math = any(tok in rest for tok in ("$", r"\(", r"\[", r"\cdot", r"\frac", r"\sum", r"\mathbf"))
+                is_code = bool(re.search(r"(\bdef\b|\bclass\b|\bimport\b|\breturn\b|\bwhile\b|\bfor\b)", rest))
+                if has_math and not is_code:
+                    cleaned_lines.append(rest)
+                    continue
+        cleaned_lines.append(line)
+
+    res = "\n".join(cleaned_lines)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+_HEADING_RE = re.compile(
+    r"^(\s*)(?:###\s+|####\s+|\*\*)?(\d+\.\d+(?:\.\d+)?\s+[A-Za-z][^\n*]+|\bAppendix\s+[A-Z]:\s+[^\n*]+)(?:\*\*)?\s*$",
+    re.MULTILINE,
+)
+
+
+def _normalize_markdown_headings(text: str) -> str:
+    """Đảm bảo các đề mục con như 3.1, 3.2 có tiền tố Markdown ### và khoảng cách dòng chuẩn."""
+    def repl(m: re.Match) -> str:
+        title = m.group(2).strip()
+        return f"\n\n### {title}\n\n"
+
+    parts = _CODE_SPAN_RE.split(str(text))
+    for idx in range(0, len(parts), 2):
+        parts[idx] = _HEADING_RE.sub(repl, parts[idx])
+    res = "".join(parts)
+    return re.sub(r"\n{3,}", "\n\n", res)
+
+
+def _normalize_markdown_math(text: str) -> str:
+    """Chuyển \\(...\\) và \\[...\\] ngoài code block sang $...$ và $$...$$ để Streamlit KaTeX render đúng, đồng thời chuẩn hóa đề mục con."""
+    text = _unwrap_math_code_blocks(str(text))
+    text = _normalize_markdown_headings(text)
+    parts = _CODE_SPAN_RE.split(text)
+    for idx in range(0, len(parts), 2):
+        seg = parts[idx]
+        seg = re.sub(r"\\\[\s*(.*?)\s*\\\]", lambda m: f"\n$$\n{m.group(1).strip()}\n$$\n", seg, flags=re.DOTALL)
+        seg = re.sub(r"\\\(\s*(.*?)\s*\\\)", lambda m: f"${m.group(1).strip()}$", seg, flags=re.DOTALL)
+        parts[idx] = seg
+    return "".join(parts)
+
+
 def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
-    """Áp dụng sanitize placeholder lên các trường văn bản của WriterOutput trước khi trả về UI."""
+    """Áp dụng sanitize placeholder và chuẩn hóa công thức Markdown trên các trường văn bản của WriterOutput."""
     text_fields = (
         "abstract", "introduction", "related_work", "methodology",
         "experimental_results", "discussion", "conclusion",
@@ -1278,7 +1370,7 @@ def sanitize_writer_output(writer: WriterOutput) -> WriterOutput:
     for field in text_fields:
         value = data.get(field, "")
         if isinstance(value, str):
-            data[field] = sanitize_math_placeholders(value)
+            data[field] = _normalize_markdown_math(sanitize_math_placeholders(value))
     formulas = data.get("mathematical_formulas") or []
     data["mathematical_formulas"] = [_strip_math_delimiters(f) for f in formulas if _strip_math_delimiters(f)] or ["y = f(x)"]
     return WriterOutput(**data)
@@ -1519,7 +1611,7 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             "active token count to \\(k = \\rho L\\), where \\(\\rho \\in (0, 1]\\) denotes the empirical retention density (typically \\(\\rho \\approx 0.35\\)). "
             "The operational complexity is thus bounded by:\n"
             "$$\\operatorname{Cost}_{proposed} = \\mathcal{O}(B \\cdot L \\cdot D + B \\cdot k \\cdot L \\cdot D) = \\mathcal{O}(B \\cdot L \\cdot D + B \\cdot \\rho L^2 D) \\text{ FLOPs}.$$\n"
-            "From a memory-bandwidth perspective, DRAM transfer volume is reduced by approximately \\((1 - \\rho^2) \\times 100\\%,\\) mitigating "
+            "From a memory-bandwidth perspective, DRAM transfer volume is reduced by approximately \\((1 - \\rho^2) \\times 100\\%\\), mitigating "
             "SRAM cache thrashing and yielding substantial wall-clock latency reductions on tensor accelerators.\n\n"
             "### 3.6 Implementation & Accelerator Optimization Nuances\n"
             f"The reference implementation is authored in Python 3.11 utilizing PyTorch 2.14 and CUDA 12.1. "
