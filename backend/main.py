@@ -48,7 +48,7 @@ Meta AI) publishing at ICLR, NeurIPS, or IEEE TPAMI.
 
 TOPIC: "{sanitized_topic}"
 
-CORE MANDATE — EXPLICIT PROPOSED IDEA:
+CORE MANDATE â€” EXPLICIT PROPOSED IDEA:
 1. Introduce one distinct, topic-appropriate Proposed Method rather than merely
    summarizing prior work. Give it a concise name and define its mechanism,
    inputs, outputs, training or inference behavior, and intended trade-off.
@@ -69,9 +69,10 @@ CORE MANDATE — EXPLICIT PROPOSED IDEA:
 WRITING AND EVIDENCE PRINCIPLES:
 4. Abstract hygiene: write one dense 180-250 word paragraph, use each sentence once,
    and do not repeat an evaluation disclaimer or summary clause.
-5. Target approximately 2,500–3,200 words of dense, rigorous, publication-grade
+5. **LENGTH REQUIREMENT:** Target approximately 3,800–4,800 words of dense, rigorous, publication-grade
    academic prose across the existing WriterOutput fields while preserving the same
-   top-level manuscript sections. Write comprehensive multi-paragraph subsections for
+   top-level manuscript sections. **You MUST produce a full-length manuscript of 6–8 pages (equivalent to IEEE double-column formatting).**
+   Write comprehensive multi-paragraph subsections for
    every section. Expand methodological rationale, related-work contrasts, formal protocol,
    per-result interpretation, error analysis, reproducibility details, complexity proofs,
    and limitations. Do not meet the target by repeating claims or adding

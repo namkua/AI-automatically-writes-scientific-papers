@@ -2269,6 +2269,16 @@ def main() -> None:
         "paper_chat_history": [],
     }.items():
         st.session_state.setdefault(key, value)
+    if "preset" not in st.session_state:
+        st.session_state["preset"] = CUSTOM
+    if "topic" not in st.session_state:
+        st.session_state["topic"] = ""
+    if "domain" not in st.session_state:
+        st.session_state["domain"] = ""
+    if "objective" not in st.session_state:
+        st.session_state["objective"] = ""
+    if "constraints" not in st.session_state:
+        st.session_state["constraints"] = ""
     with st.sidebar:
         st.markdown("## Bảng điều khiển nghiên cứu")
         default_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
@@ -2314,8 +2324,7 @@ def main() -> None:
         st.text_area("Ràng buộc", key="constraints", height=75)
         compare_clicked = render_baseline_controls()
         run_clicked = st.button("🚀 Bắt đầu sinh bài báo", type="primary", width="stretch")
-    needs_initial_pipeline = not bool(st.session_state["full_pipeline_result"])
-    if run_clicked or needs_initial_pipeline:
+    if run_clicked:
         # HARD RESET: xóa sạch cache & session state của bài cũ trước khi sinh mới
         st.cache_data.clear()
         st.cache_resource.clear()
