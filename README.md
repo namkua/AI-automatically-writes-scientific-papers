@@ -34,23 +34,24 @@ simulation estimates**, not measured scientific results.
 User topic
     |
     v
-academic_sanitizer.py
+backend/sanitizer.py
     |
     v
 FastAPI: backend/main.py
     |
-    +--> Planner: domain, research question, hypothesis, baselines
-    +--> Researcher: datasets, benchmark matrix, ablations, evidence labels
-    +--> Writer: abstract, gap, proposed method, methodology, results
-    +--> Guardrail: formula, benchmark, and evidence consistency checks
-    +--> Reviewer: novelty, rigor, clarity, weaknesses, revisions
+    +--> domain_catalog.py   : Knowledge Base, Inference Engine, domain profiles
+    +--> research_engine.py  : Planner, Researcher (simulation), Reviewer
+    +--> synthesis_writer.py : Structured synthesis writer & deduplication
+    +--> gemini_client.py    : Live Gemini routing, fallback & Paper Q&A
+    +--> guardrail_agent.py  : Formula, benchmark, and evidence consistency checks
     |
     v
-Streamlit: app.py
+Streamlit: app.py -> frontend/ui.py
     |
-    +--> PDF preview and browser viewer
-    +--> Benchmark tables and charts
-    +--> PDF / LaTeX / JSON / ZIP downloads
+    +--> views.py               : Tabs, PDF preview images, charts & Q&A chat
+    +--> baseline_comparison.py : PDF metadata extraction & grounded comparison
+    +--> exporters.py           : PDF, IEEE HTML, LaTeX, BibTeX, Markdown, ZIP
+    +--> chart_generator.py     : Matplotlib benchmark and ablation figures
 ```
 
 ### Runtime modes
@@ -85,13 +86,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-The core requirements install the Streamlit application and API. Optional
-research models and integrations are in `requirements-optional.txt`; install
-them only when you need those experiments:
-
-```powershell
-pip install -r requirements-optional.txt
-```
+The core requirements in `requirements.txt` install both the FastAPI backend and the Streamlit web UI.
 
 If PowerShell blocks activation, run the project with the interpreter directly:
 
@@ -201,44 +196,57 @@ Proposed Methodology, Experiments, Discussion, Conclusion, and References.
 
 ## Validation and tests
 
-Compile the main application:
+Compile all application and test modules:
 
 ```powershell
-.\env\Scripts\python.exe -m py_compile app.py backend\main.py
+.\env\Scripts\python.exe -m py_compile app.py backend/*.py frontend/*.py tests/*.py
 ```
 
 Run the five-topic end-to-end stress test:
 
 ```powershell
-.\env\Scripts\python.exe test_pipeline_stress.py
+.\env\Scripts\python.exe tests/test_pipeline_stress.py
 ```
 
 Run adversarial topic coverage:
 
 ```powershell
-.\env\Scripts\python.exe test_adversarial_topics.py
+.\env\Scripts\python.exe tests/test_adversarial_topics.py
 ```
 
 The adversarial suite covers short topics, Vietnamese input, mixed language,
 LaTeX/XML-like characters, symbols, and unusual domains.
 
-GitHub Actions runs the compile check and both pipeline suites, plus the
-ConvNeur smoke checks, through `.github/workflows/smoke_test.yml`.
+GitHub Actions runs the compile check and both pipeline suites through
+`.github/workflows/smoke_test.yml`.
 
 ## Project layout
 
 ```text
-app.py                       Streamlit UI and PDF/artifact export
-academic_sanitizer.py       Topic normalization and safety cleanup
-chart_generator.py           Benchmark and ablation charts
-backend/main.py              FastAPI routes and multi-agent orchestration
-backend/schemas.py           Typed Pydantic pipeline contracts
-backend/guardrail_agent.py   Manuscript and evidence audit
-test_pipeline_stress.py      Five-topic E2E artifact test
-test_adversarial_topics.py   Ten adversarial-topic test
-data/                        Optional local datasets
-results/                     Generated experiment artifacts
-docs/                        Project documentation assets
+app.py                         Thin Streamlit entrypoint
+backend/
+  main.py                      FastAPI routes, security middleware, pipeline assembly
+  schemas.py                   Typed Pydantic v2 pipeline contracts
+  sanitizer.py                 Topic & math/Markdown normalization
+  domain_catalog.py            Domain profiles, Knowledge Base & Inference Engine
+  research_engine.py           Planner, Researcher (benchmarks/ablations) & Reviewer
+  synthesis_writer.py          Synthesis fallback writer & prose deduplication
+  gemini_client.py             Gemini Live calls, multi-model fallback & Paper Q&A
+  guardrail_agent.py           Manuscript formula, latency & evidence audit
+frontend/
+  ui.py                        Sidebar controls, session state & tab routing
+  views.py                     Tab views, Plotly charts, PDF preview & Paper Q&A
+  exporters.py                 ReportLab PDF, IEEE HTML, LaTeX, BibTeX & ZIP bundle
+  baseline_comparison.py       Baseline PDF upload, metadata extraction & review
+  chart_generator.py           Matplotlib benchmark & ablation PNG generator
+  api_client.py                Backend API client & Gemini key resolution
+  styles.py                    Theme CSS, presets & DataFrame display helpers
+tests/
+  test_pipeline_stress.py      Five-topic E2E artifact test
+  test_adversarial_topics.py   Ten adversarial-topic test
+  test_e2e_app.py              Playwright browser UI E2E suite
+data/                          Optional verified local Hugging Face subsets
+results/                       Generated per-run artifact bundles
 ```
 
 ## Evidence and responsible use
